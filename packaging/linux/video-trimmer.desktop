@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Video Trimmer
+Name=mxCut
 GenericName=Video Trimmer
 Comment=Trim videos one at a time or a whole folder at once
 Exec=video-trimmer %f

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds Video-Trimmer-<version>-x86_64.AppImage from a Linux build: the app,
+# Builds mxCut-<version>-x86_64.AppImage from a Linux build: the app,
 # Qt and its QML modules, libmpv, and an FFmpeg next to the program.
 # Usage: package-appimage.sh <build dir> <version> [output dir]
 set -euo pipefail
@@ -33,7 +33,7 @@ export QML_SOURCES_PATHS="$src/qml:$src/packaging/qml-deploy"
 export QMAKE=${QMAKE:-$(command -v qmake6 || command -v qmake)}
 # Wayland and X11 both work; ship the Wayland platform too where it exists.
 export EXTRA_PLATFORM_PLUGINS="libqwayland-egl.so;libqwayland-generic.so"
-export LDAI_OUTPUT="$out/Video-Trimmer-$version-x86_64.AppImage"
+export LDAI_OUTPUT="$out/mxCut-$version-x86_64.AppImage"
 export LINUXDEPLOY_OUTPUT_VERSION="$version"
 
 linuxdeploy --appdir "$appdir" \

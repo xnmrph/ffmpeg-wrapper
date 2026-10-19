@@ -1,4 +1,4 @@
-; Windows installer for Video Trimmer, built with NSIS.
+; Windows installer for mxCut, built with NSIS.
 ; makensis -DVERSION=0.1.0 -DDIST=path\to\video-trimmer -DOUTFILE=setup.exe installer.nsi
 
 Unicode true
@@ -14,7 +14,7 @@ Unicode true
   !define OUTFILE "video-trimmer-${VERSION}-setup.exe"
 !endif
 
-!define APP "Video Trimmer"
+!define APP "mxCut"
 !define EXE "video-trimmer.exe"
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\VideoTrimmer"
 
@@ -29,7 +29,7 @@ VIAddVersionKey "ProductName" "${APP}"
 VIAddVersionKey "FileDescription" "${APP} installer"
 VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
-VIAddVersionKey "LegalCopyright" "Video Trimmer contributors"
+VIAddVersionKey "LegalCopyright" "mxCut contributors"
 
 !define MUI_ICON "..\icons\video-trimmer.ico"
 !define MUI_UNICON "..\icons\video-trimmer.ico"
@@ -64,7 +64,7 @@ Function .onVerifyInstDir
   ok:
 FunctionEnd
 
-Section "Video Trimmer (required)" SecApp
+Section "mxCut (required)" SecApp
   SectionIn RO
   ; Clear out an older version's files first, so no stale DLLs are left behind.
   IfFileExists "$INSTDIR\${EXE}" 0 +2
@@ -74,6 +74,11 @@ Section "Video Trimmer (required)" SecApp
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   CreateShortcut "$SMPROGRAMS\${APP}.lnk" "$INSTDIR\${EXE}"
+  ; Shortcuts from before the app was renamed.
+  Delete "$SMPROGRAMS\Video Trimmer.lnk"
+  IfFileExists "$DESKTOP\Video Trimmer.lnk" 0 +3
+    Delete "$DESKTOP\Video Trimmer.lnk"
+    CreateShortcut "$DESKTOP\${APP}.lnk" "$INSTDIR\${EXE}"
 
   WriteRegStr HKLM "Software\VideoTrimmer" "InstallDir" "$INSTDIR"
   WriteRegStr HKLM "${UNINST_KEY}" "DisplayName" "${APP}"

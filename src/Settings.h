@@ -24,6 +24,8 @@ class Settings : public QObject
     Q_PROPERTY(int audioBitrate READ audioBitrate WRITE setAudioBitrate NOTIFY changed)
     Q_PROPERTY(int maxConcurrent READ maxConcurrent WRITE setMaxConcurrent NOTIFY changed)
     Q_PROPERTY(QString ffmpegPath READ ffmpegPath WRITE setFfmpegPath NOTIFY ffmpegPathChanged)
+    Q_PROPERTY(QString inKey READ inKey WRITE setInKey NOTIFY changed)
+    Q_PROPERTY(QString outKey READ outKey WRITE setOutKey NOTIFY changed)
 
 public:
     explicit Settings(QObject *parent = nullptr);
@@ -51,12 +53,18 @@ public:
     // Empty means find FFmpeg automatically.
     QString ffmpegPath() const;
     void setFfmpegPath(const QString &value);
+    // Keys that set the in and out points, as QKeySequence text.
+    QString inKey() const;
+    void setInKey(const QString &value);
+    QString outKey() const;
+    void setOutKey(const QString &value);
 
     TrimOptions trimOptions() const;
 
     // The file name the current pattern gives, for the Settings preview.
     Q_INVOKABLE QString previewFileName(const QString &videoName, int mode) const;
     Q_INVOKABLE void resetEncoding();
+    Q_INVOKABLE void resetShortcuts();
 
 signals:
     void changed();

@@ -15,6 +15,7 @@ int main(int argc, char *argv[])
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
 
     QGuiApplication app(argc, argv);
+    // The name settings are saved under; kept from before the app was renamed.
     app.setApplicationName(QStringLiteral("Video Trimmer"));
     app.setOrganizationName(QStringLiteral("video-trimmer"));
     app.setApplicationVersion(QStringLiteral(APP_VERSION));

@@ -95,8 +95,8 @@ jobs:
           bash .github/scripts/package-windows.sh build dist/video-trimmer
           version=$(sed -n 's/^project(video-trimmer VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
           makensis -V2 -DVERSION="$version" -DDIST="$(cygpath -w "$PWD/dist/video-trimmer")" \
-            -DOUTFILE="$(cygpath -w "$PWD/dist/Video-Trimmer-$version-setup.exe")" packaging/windows/installer.nsi
-          (cd dist && zip -qr "Video-Trimmer-$version-windows-x64.zip" video-trimmer)
+            -DOUTFILE="$(cygpath -w "$PWD/dist/mxCut-$version-setup.exe")" packaging/windows/installer.nsi
+          (cd dist && zip -qr "mxCut-$version-windows-x64.zip" video-trimmer)
       - uses: actions/upload-artifact@v4
         with:
           name: video-trimmer-windows-x64
@@ -140,5 +140,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # Creates the tag at this commit when the run wasn't started by one.
-          gh release create "$TAG" --target "$GITHUB_SHA" --title "Video Trimmer ${TAG#v}" \
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "mxCut ${TAG#v}" \
             --generate-notes artifacts/*

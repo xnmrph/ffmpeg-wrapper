@@ -16,6 +16,15 @@ Dialog {
     width: Math.min(620, parent ? parent.width - 40 : 620)
     height: Math.min(720, parent ? parent.height - 40 : 720)
     anchors.centerIn: parent
+    padding: 20
+
+    background: Rectangle {
+        color: Theme.surfaceRaised
+        radius: Theme.radius + 4
+        border.color: Theme.border
+    }
+
+    Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.6) }
 
     function localPath(url) {
         const s = url.toString()
@@ -30,7 +39,7 @@ Dialog {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         font.pixelSize: 11
-        opacity: 0.65
+        color: Theme.textDim
     }
 
     FolderDialog {
@@ -192,7 +201,7 @@ Dialog {
                         }
                         Label {
                             text: root.settings.quality
-                            font.family: "monospace"
+                            font.family: Theme.mono
                             Layout.preferredWidth: 24
                         }
                     }
@@ -254,7 +263,7 @@ Dialog {
                     Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WrapAnywhere
-                        color: root.probe.ffmpegFound || root.probe.probing ? palette.windowText : "#ff6b6b"
+                        color: root.probe.ffmpegFound || root.probe.probing ? Theme.text : Theme.danger
                         text: root.probe.probing && root.probe.ffmpegPath === "" ? "Looking for FFmpeg…"
                             : root.probe.ffmpegFound
                               ? "Using FFmpeg " + root.probe.ffmpegVersion + " at " + root.probe.ffmpegPath

@@ -20,6 +20,9 @@ class MpvItem : public QQuickFramebufferObject
     Q_PROPERTY(double position READ position NOTIFY positionChanged)
     Q_PROPERTY(double duration READ duration NOTIFY durationChanged)
     Q_PROPERTY(double fps READ fps NOTIFY fpsChanged)
+    // Display size of the video (after aspect correction), 0 until known.
+    Q_PROPERTY(int videoWidth READ videoWidth NOTIFY videoSizeChanged)
+    Q_PROPERTY(int videoHeight READ videoHeight NOTIFY videoSizeChanged)
     Q_PROPERTY(bool paused READ paused WRITE setPaused NOTIFY pausedChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorStringChanged)
 
@@ -35,6 +38,8 @@ public:
     double position() const { return m_position; }
     double duration() const { return m_duration; }
     double fps() const { return m_fps; }
+    int videoWidth() const { return m_videoWidth; }
+    int videoHeight() const { return m_videoHeight; }
     bool paused() const { return m_paused; }
     void setPaused(bool paused);
     QString errorString() const { return m_errorString; }
@@ -50,6 +55,7 @@ signals:
     void positionChanged();
     void durationChanged();
     void fpsChanged();
+    void videoSizeChanged();
     void pausedChanged();
     void errorStringChanged();
 
@@ -72,6 +78,8 @@ private:
     double m_position = 0;
     double m_duration = 0;
     double m_fps = 0;
+    int m_videoWidth = 0;
+    int m_videoHeight = 0;
     bool m_paused = true;
     QString m_errorString;
 };

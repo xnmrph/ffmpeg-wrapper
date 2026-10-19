@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Controls.Material
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import Trimmer
@@ -10,59 +11,37 @@ ApplicationWindow {
     property url initialSource
     property real inPoint: 0
     property real outPoint: 0
+    property int trimMode: TrimJob.Fast
     // Folder mode adds the file sidebar and the export queue.
     property bool folderMode: false
     // In and out points set on each video this session, keyed by URL, so
     // moving between videos in a folder doesn't lose them.
     property var cuts: ({})
     readonly property bool busy: job.running || exportQueue.running
+    readonly property real minimumLength: 0.04
 
-    width: 1280
-    height: 800
-    minimumWidth: 900
-    minimumHeight: 520
+    width: 1440
+    height: 900
+    minimumWidth: 960
+    minimumHeight: 600
     visible: true
     title: player.loaded ? fileName(player.source) + " - Video Trimmer" : "Video Trimmer"
-    color: palette.window
+    color: Theme.background
 
-    palette {
-        window: "#2b2d31"
-        windowText: "#e6e6e6"
-        base: "#1e1f22"
-        alternateBase: "#2b2d31"
-        text: "#e6e6e6"
-        button: "#3a3c41"
-        buttonText: "#e6e6e6"
-        highlight: "#3d8bfd"
-        highlightedText: "white"
-        toolTipBase: "#1e1f22"
-        toolTipText: "#e6e6e6"
-        placeholderText: "#8a8a8a"
-        mid: "#45474c"
-        dark: "#1a1b1e"
-        light: "#4a4c52"
-        midlight: "#3f4146"
-        shadow: "#000000"
-        disabled.text: "#707070"
-        disabled.buttonText: "#707070"
-        disabled.windowText: "#707070"
-    }
+    Material.theme: Material.Dark
+    Material.accent: Theme.accent
+    Material.primary: Theme.accent
+    Material.background: Theme.surfaceRaised
+    Material.foreground: Theme.text
+    // Material shouts button labels in capitals; keep them as written.
+    font.capitalization: Font.MixedCase
 
     function fileName(url) {
         const s = decodeURIComponent(url.toString())
         return s.substring(s.lastIndexOf("/") + 1)
     }
 
-    function formatTime(t) {
-        if (!(t >= 0))
-            t = 0
-        const ms = Math.round(t * 1000)
-        const h = Math.floor(ms / 3600000)
-        const m = Math.floor(ms / 60000) % 60
-        const s = Math.floor(ms / 1000) % 60
-        const pad = (n, w) => String(n).padStart(w, "0")
-        return (h > 0 ? h + ":" : "") + pad(m, 2) + ":" + pad(s, 2) + "." + pad(ms % 1000, 3)
-    }
+    function timecode(t) { return Theme.timecode(t, player.fps) }
 
     // Opens a file or a folder, from the command line or a drop.
     function openPath(url) {
@@ -102,8 +81,8 @@ ApplicationWindow {
             cuts[String(player.source)] = { inPoint: inPoint, outPoint: outPoint }
     }
 
-    function setIn() { inPoint = Math.min(player.position, outPoint - scrubber.minimumLength); rememberCut() }
-    function setOut() { outPoint = Math.max(player.position, inPoint + scrubber.minimumLength); rememberCut() }
+    function setIn() { inPoint = Math.min(player.position, outPoint - minimumLength); rememberCut() }
+    function setOut() { outPoint = Math.max(player.position, inPoint + minimumLength); rememberCut() }
 
     function nudge(delta) {
         player.seek(Math.max(0, Math.min(player.duration, player.position + delta)), true)
@@ -113,9 +92,23 @@ ApplicationWindow {
         if (!folderMode || !player.loaded)
             return
         rememberCut()
-        exportQueue.add(player.source, inPoint, outPoint, modeBox.currentValue)
+        exportQueue.add(player.source, inPoint, outPoint, trimMode)
         if (autoAdvance.checked)
             stepVideo(1)
+    }
+
+    function trimNow() {
+        if (job.running) {
+            job.cancel()
+            return
+        }
+        job.source = player.source
+        job.inPoint = inPoint
+        job.outPoint = outPoint
+        job.mode = trimMode
+        job.output = ""
+        job.applySettings(appSettings)
+        job.start()
     }
 
     Component.onCompleted: if (initialSource.toString() !== "") openPath(initialSource)
@@ -176,6 +169,12 @@ ApplicationWindow {
         maxConcurrent: appSettings.maxConcurrent
     }
 
+    MediaPreview {
+        id: preview
+        source: player.loaded ? player.source : ""
+        duration: player.duration
+    }
+
     SettingsDialog {
         id: settingsDialog
         settings: appSettings
@@ -204,37 +203,66 @@ ApplicationWindow {
     Shortcut { sequence: StandardKey.Preferences; onActivated: settingsDialog.open() }
     Shortcut { sequence: "Ctrl+,"; onActivated: settingsDialog.open() }
 
-    header: ToolBar {
+    header: Rectangle {
+        implicitHeight: 48
+        color: "#0b0b0d"
+
+        Rectangle {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: 1
+            color: Theme.border
+        }
+
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
+            anchors.leftMargin: 14
+            anchors.rightMargin: 10
+            spacing: 6
 
-            Button {
-                text: "Open video…"
+            Icon {
+                path: Icons.cut
+                color: Theme.accent
+                size: 20
+            }
+            Text {
+                text: "Video Trimmer"
+                color: Theme.text
+                font.pixelSize: 14
+                font.weight: Font.DemiBold
+                Layout.rightMargin: 14
+            }
+            IconButton {
+                text: "Open video"
+                iconPath: Icons.movie
+                tip: "Open one video (Ctrl+O)"
                 enabled: !window.busy
                 onClicked: openDialog.open()
             }
-            Button {
-                text: "Open folder…"
+            IconButton {
+                text: "Open folder"
+                iconPath: Icons.folder
+                tip: "Trim a folder of videos as a batch (Ctrl+Shift+O)"
                 enabled: !window.busy
                 onClicked: folderDialog.open()
             }
-            Label {
+            Text {
                 Layout.fillWidth: true
-                elide: Text.ElideMiddle
                 horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideMiddle
                 text: player.loaded ? window.fileName(player.source) : ""
-                opacity: 0.8
+                color: Theme.textDim
+                font.pixelSize: 13
             }
-            Label {
-                text: "Space play · I/O in/out · ←/→ frame · Shift+←/→ 5 s · [ ] jump"
-                      + (window.folderMode ? " · Q queue · ↑/↓ video" : "")
-                opacity: 0.5
-                font.pixelSize: 11
+            IconButton {
+                iconPath: Icons.keyboard
+                tip: "Space  play / pause\nI / O  set in / out\n← / →  previous / next frame\n"
+                     + "Shift + ← / →  jump 5 seconds\n[ / ]  go to in / out\n"
+                     + "Q  add to queue (folder)\n↑ / ↓  previous / next video (folder)\nCtrl + ,  settings"
             }
-            Button {
-                text: "Settings…"
+            IconButton {
+                iconPath: Icons.settings
+                tip: "Settings (Ctrl+,)"
                 onClicked: settingsDialog.open()
             }
         }
@@ -248,21 +276,23 @@ ApplicationWindow {
         anchors.right: parent.right
         height: visible ? 40 : 0
         visible: !encoderProbe.probing && !encoderProbe.ffmpegFound
-        color: "#5c2b2b"
+        color: "#3a1517"
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            Label {
+            anchors.leftMargin: 14
+            anchors.rightMargin: 10
+            Text {
                 Layout.fillWidth: true
                 text: appSettings.ffmpegPath !== ""
                       ? "The FFmpeg program chosen in Settings doesn't work. Trimming won't work until it's fixed."
                       : "FFmpeg wasn't found, so trimming won't work. Install FFmpeg, or choose where it is in Settings."
+                color: "#ffb4b4"
                 elide: Text.ElideRight
+                font.pixelSize: 13
             }
-            Button {
-                text: "Settings…"
+            IconButton {
+                text: "Settings"
                 onClicked: settingsDialog.open()
             }
         }
@@ -287,14 +317,38 @@ ApplicationWindow {
             Layout.fillHeight: true
             spacing: 0
 
-            Rectangle {
+            // Program monitor
+            Item {
+                id: monitor
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: "black"
 
-                MpvItem {
-                    id: player
+                Item {
+                    id: picture
                     anchors.fill: parent
+                    anchors.margins: 18
+
+                    MpvItem {
+                        id: player
+                        anchors.fill: parent
+                    }
+
+                    // Outline around the picture itself, so black bars inside
+                    // the video stand out from the empty space around it.
+                    Rectangle {
+                        readonly property real fit: player.videoWidth > 0 && player.videoHeight > 0
+                            ? Math.min(picture.width / player.videoWidth, picture.height / player.videoHeight) : 0
+                        readonly property real w: player.videoWidth * fit
+                        readonly property real h: player.videoHeight * fit
+                        visible: player.loaded && fit > 0 && outlineButton.checked
+                        x: Math.floor((picture.width - w) / 2) - 1
+                        y: Math.floor((picture.height - h) / 2) - 1
+                        width: Math.ceil(w) + 2
+                        height: Math.ceil(h) + 2
+                        color: "transparent"
+                        border.color: "white"
+                        border.width: 1
+                    }
                 }
 
                 MouseArea {
@@ -303,15 +357,25 @@ ApplicationWindow {
                     onClicked: player.togglePause()
                 }
 
-                Label {
+                Column {
                     anchors.centerIn: parent
                     visible: !player.loaded
-                    horizontalAlignment: Text.AlignHCenter
-                    text: player.errorString !== "" ? "Could not open this file: " + player.errorString
-                        : window.folderMode && folderModel.count === 0 ? "This folder has no videos"
-                        : "Open a video or a folder, or drop one here"
-                    font.pixelSize: 18
-                    opacity: 0.6
+                    spacing: 14
+
+                    Icon {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        path: Icons.movie
+                        size: 48
+                        color: Theme.textFaint
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: player.errorString !== "" ? "Could not open this file: " + player.errorString
+                            : window.folderMode && folderModel.count === 0 ? "This folder has no videos"
+                            : "Open a video or a folder, or drop one here"
+                        color: Theme.textDim
+                        font.pixelSize: 16
+                    }
                 }
 
                 DropArea {
@@ -321,153 +385,222 @@ ApplicationWindow {
                 }
             }
 
-            Scrubber {
-                id: scrubber
+            // Transport bar, as under a program monitor.
+            Item {
                 Layout.fillWidth: true
-                Layout.topMargin: 6
+                implicitHeight: 48
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 18
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: window.timecode(player.position)
+                    color: Theme.accent
+                    font.family: Theme.mono
+                    font.pixelSize: 18
+                }
+
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 4
+                    enabled: player.loaded
+
+                    IconButton { iconPath: Icons.markIn; tip: "Set in point (I)"; onClicked: window.setIn() }
+                    IconButton { iconPath: Icons.markOut; tip: "Set out point (O)"; onClicked: window.setOut() }
+                    Item { width: 12; height: 1 }
+                    IconButton { iconPath: Icons.goToIn; tip: "Go to in point ([)"; onClicked: player.seek(window.inPoint, true) }
+                    IconButton { iconPath: Icons.stepBack; tip: "Previous frame (←)"; onClicked: player.frameBackStep() }
+                    IconButton {
+                        iconPath: player.paused ? Icons.play : Icons.pause
+                        iconSize: 24
+                        implicitWidth: 44
+                        tip: "Play / pause (Space)"
+                        onClicked: player.togglePause()
+                    }
+                    IconButton { iconPath: Icons.stepForward; tip: "Next frame (→)"; onClicked: player.frameStep() }
+                    IconButton { iconPath: Icons.goToOut; tip: "Go to out point (])"; onClicked: player.seek(window.outPoint, true) }
+                    Item { width: 12; height: 1 }
+                    IconButton {
+                        id: outlineButton
+                        iconPath: Icons.frame
+                        checkable: true
+                        checked: true
+                        tip: "Outline the picture, to spot black bars"
+                    }
+                }
+
+                Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 18
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: window.timecode(player.duration)
+                    color: Theme.textDim
+                    font.family: Theme.mono
+                    font.pixelSize: 14
+                }
+            }
+
+            Timeline {
+                id: timeline
+                Layout.fillWidth: true
                 duration: player.duration
                 position: player.position
                 inPoint: window.inPoint
                 outPoint: window.outPoint
+                fps: player.fps
+                clipName: player.loaded ? window.fileName(player.source) : ""
+                thumbnails: preview.thumbnails
+                peaks: preview.peaks
+                aspect: player.videoHeight > 0 ? player.videoWidth / player.videoHeight : 16 / 9
+                minimumLength: window.minimumLength
                 onSeekRequested: (time, exact) => player.seek(time, exact)
                 onInPointMoved: (time) => { window.inPoint = time; window.rememberCut() }
                 onOutPointMoved: (time) => { window.outPoint = time; window.rememberCut() }
             }
 
-            RowLayout {
+            // Action bar
+            Rectangle {
                 Layout.fillWidth: true
-                Layout.leftMargin: 12
-                Layout.rightMargin: 12
-                Layout.bottomMargin: 6
-                spacing: 10
-                enabled: player.loaded
+                implicitHeight: 60
+                color: Theme.surface
 
-                Button {
-                    text: player.paused ? "Play" : "Pause"
-                    Layout.preferredWidth: 72
-                    onClicked: player.togglePause()
-                }
-                Label {
-                    text: window.formatTime(player.position) + " / " + window.formatTime(player.duration)
-                    font.family: "monospace"
+                Rectangle {
+                    width: parent.width
+                    height: 1
+                    color: Theme.border
                 }
 
-                Item { Layout.fillWidth: true }
-
-                Button { text: "Set in"; onClicked: window.setIn() }
-                Label {
-                    text: window.formatTime(window.inPoint)
-                    font.family: "monospace"
-                }
-                Label { text: "→"; opacity: 0.6 }
-                Label {
-                    text: window.formatTime(window.outPoint)
-                    font.family: "monospace"
-                }
-                Button { text: "Set out"; onClicked: window.setOut() }
-                Label {
-                    text: "(" + window.formatTime(window.outPoint - window.inPoint) + ")"
-                    font.family: "monospace"
-                    opacity: 0.7
-                }
-
-                Item { Layout.fillWidth: true }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.leftMargin: 12
-                Layout.rightMargin: 12
-                Layout.bottomMargin: 10
-                spacing: 10
-
-                ComboBox {
-                    id: modeBox
-                    Layout.preferredWidth: 220
-                    enabled: !job.running
-                    textRole: "text"
-                    valueRole: "value"
-                    model: [
-                        { text: "Fast (lossless, keyframes)", value: TrimJob.Fast },
-                        { text: "Accurate (re-encode)", value: TrimJob.Accurate }
-                    ]
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 600
-                    ToolTip.text: currentValue === TrimJob.Fast
-                                  ? "Copies the streams without re-encoding. Very quick and lossless, but the start snaps to the nearest earlier keyframe."
-                                  : "Re-encodes so the cut lands on the exact frame. Slower. The encoder and quality are set in Settings."
-                }
-
-                // Single-video mode: trim right away, with the result shown here.
-                ProgressBar {
-                    Layout.preferredWidth: 160
-                    value: job.progress
-                    visible: !window.folderMode && job.running
-                }
-                Label {
-                    Layout.fillWidth: true
-                    visible: !window.folderMode
-                    elide: Text.ElideMiddle
-                    ToolTip.visible: job.state === TrimJob.Failed && errorHover.hovered && job.errorDetails !== ""
-                    ToolTip.text: job.errorDetails
-                    HoverHandler { id: errorHover }
-                    color: job.state === TrimJob.Failed ? "#ff6b6b" : palette.windowText
-                    text: {
-                        switch (job.state) {
-                        case TrimJob.Running: return "Trimming… " + Math.round(job.progress * 100) + "%"
-                        case TrimJob.Finished: return "Saved " + job.output
-                        case TrimJob.Failed: return "Trim failed: " + job.errorString
-                        case TrimJob.Cancelled: return "Trim cancelled"
-                        }
-                        return ""
-                    }
-                }
-                Button {
-                    text: "Show in folder"
-                    visible: !window.folderMode && job.state === TrimJob.Finished
-                    onClicked: Qt.openUrlExternally(job.outputFolderUrl())
-                }
-                Button {
-                    visible: !window.folderMode
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 12
+                    spacing: 14
                     enabled: player.loaded
-                    text: job.running ? "Cancel" : "Trim"
-                    highlighted: !job.running
-                    Layout.preferredWidth: 90
-                    onClicked: {
-                        if (job.running) {
-                            job.cancel()
-                            return
-                        }
-                        job.source = player.source
-                        job.inPoint = window.inPoint
-                        job.outPoint = window.outPoint
-                        job.mode = modeBox.currentValue
-                        job.output = ""
-                        job.applySettings(appSettings)
-                        job.start()
-                    }
-                }
 
-                // Folder mode: queue this video's cut and move on.
-                Item {
-                    Layout.fillWidth: true
-                    visible: window.folderMode
-                }
-                CheckBox {
-                    id: autoAdvance
-                    visible: window.folderMode
-                    checked: true
-                    text: "Then go to next video"
-                }
-                Button {
-                    visible: window.folderMode
-                    enabled: player.loaded
-                    highlighted: true
-                    text: {
-                        const queued = exportQueue.jobFor(player.source)
-                        return queued && queued.state === TrimJob.Idle ? "Update queue (Q)" : "Add to queue (Q)"
+                    component Readout: Column {
+                        property string label
+                        property string value
+                        property color valueColor: Theme.text
+                        spacing: 1
+                        Text { text: parent.label; color: Theme.textFaint; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+                        Text { text: parent.value; color: parent.valueColor; font.family: Theme.mono; font.pixelSize: 14 }
                     }
-                    onClicked: window.addToQueue()
+
+                    Readout { label: "IN"; value: window.timecode(window.inPoint) }
+                    Readout { label: "OUT"; value: window.timecode(window.outPoint) }
+                    Readout { label: "DURATION"; value: window.timecode(window.outPoint - window.inPoint); valueColor: Theme.accent }
+
+                    Item { Layout.fillWidth: true }
+
+                    // Segmented Fast / Accurate switch.
+                    Rectangle {
+                        implicitWidth: modes.implicitWidth + 6
+                        implicitHeight: 34
+                        radius: Theme.radius + 2
+                        color: Theme.background
+                        border.color: Theme.border
+
+                        Row {
+                            id: modes
+                            anchors.centerIn: parent
+                            spacing: 2
+                            Repeater {
+                                model: [
+                                    { mode: TrimJob.Fast, text: "Fast",
+                                      tip: "Copies the streams without re-encoding. Very quick and lossless, but the start snaps to the nearest earlier keyframe." },
+                                    { mode: TrimJob.Accurate, text: "Accurate",
+                                      tip: "Re-encodes so the cut lands on the exact frame. Slower. The encoder and quality are set in Settings." }
+                                ]
+                                delegate: IconButton {
+                                    required property var modelData
+                                    text: modelData.text
+                                    tip: modelData.tip
+                                    implicitHeight: 28
+                                    implicitWidth: 80
+                                    enabled: !job.running
+                                    primary: window.trimMode === modelData.mode
+                                    onClicked: window.trimMode = modelData.mode
+                                }
+                            }
+                        }
+                    }
+
+                    // Single-video mode: trim right away, with the result shown here.
+                    ColumnLayout {
+                        visible: !window.folderMode && job.state !== TrimJob.Idle
+                        Layout.maximumWidth: 360
+                        spacing: 4
+                        Text {
+                            Layout.fillWidth: true
+                            elide: Text.ElideMiddle
+                            font.pixelSize: 12
+                            color: job.state === TrimJob.Failed ? Theme.danger
+                                 : job.state === TrimJob.Finished ? Theme.success : Theme.textDim
+                            text: {
+                                switch (job.state) {
+                                case TrimJob.Running: return "Trimming… " + Math.round(job.progress * 100) + "%"
+                                case TrimJob.Finished: return "Saved " + job.output
+                                case TrimJob.Failed: return "Trim failed: " + job.errorString
+                                case TrimJob.Cancelled: return "Trim cancelled"
+                                }
+                                return ""
+                            }
+                            ToolTip.visible: statusHover.hovered && (job.state === TrimJob.Failed ? job.errorDetails !== "" : job.state === TrimJob.Finished)
+                            ToolTip.text: job.state === TrimJob.Failed ? job.errorDetails : job.output
+                            HoverHandler { id: statusHover }
+                        }
+                        Rectangle {
+                            visible: job.running
+                            Layout.fillWidth: true
+                            implicitHeight: 3
+                            radius: 2
+                            color: Theme.hover
+                            Rectangle {
+                                width: parent.width * job.progress
+                                height: parent.height
+                                radius: 2
+                                color: Theme.accent
+                            }
+                        }
+                    }
+                    IconButton {
+                        text: "Show in folder"
+                        iconPath: Icons.openFolder
+                        visible: !window.folderMode && job.state === TrimJob.Finished
+                        onClicked: Qt.openUrlExternally(job.outputFolderUrl())
+                    }
+                    IconButton {
+                        visible: !window.folderMode
+                        primary: !job.running
+                        iconPath: job.running ? Icons.close : Icons.cut
+                        text: job.running ? "Cancel" : "Trim"
+                        implicitHeight: 36
+                        implicitWidth: 110
+                        onClicked: window.trimNow()
+                    }
+
+                    // Folder mode: queue this video's cut and move on.
+                    CheckBox {
+                        id: autoAdvance
+                        visible: window.folderMode
+                        checked: true
+                        text: "Then next"
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 500
+                        ToolTip.text: "Go to the next video after adding this one"
+                    }
+                    IconButton {
+                        visible: window.folderMode
+                        primary: true
+                        iconPath: Icons.queueAdd
+                        implicitHeight: 36
+                        tip: "Q"
+                        text: {
+                            const queued = exportQueue.jobFor(player.source)
+                            return queued && queued.state === TrimJob.Idle ? "Update queue" : "Add to queue"
+                        }
+                        onClicked: window.addToQueue()
+                    }
                 }
             }
         }
@@ -477,7 +610,7 @@ ApplicationWindow {
             Layout.fillHeight: true
             visible: window.folderMode
             queue: exportQueue
-            formatTime: window.formatTime
+            formatTime: window.timecode
             onJobActivated: (source) => window.selectVideo(source)
         }
     }

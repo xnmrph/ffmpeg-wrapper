@@ -31,13 +31,20 @@ qt_add_executable(video-trimmer
     src/main.cpp
 )
 
+# Shared colours and icon shapes, used as QML singletons.
+set_source_files_properties(qml/Theme.qml qml/Icons.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_add_qml_module(video-trimmer
     URI Trimmer
     VERSION 1.0
     RESOURCE_PREFIX /
     QML_FILES
         qml/Main.qml
-        qml/Scrubber.qml
+        qml/Theme.qml
+        qml/Icons.qml
+        qml/Icon.qml
+        qml/IconButton.qml
+        qml/Timeline.qml
         qml/FileSidebar.qml
         qml/QueuePanel.qml
         qml/SettingsDialog.qml
@@ -49,6 +56,8 @@ qt_add_qml_module(video-trimmer
         src/Settings.h src/Settings.cpp
         src/Encoders.h src/Encoders.cpp
         src/EncoderProbe.h src/EncoderProbe.cpp
+        src/MediaPreview.h src/MediaPreview.cpp
+        src/WaveformView.h src/WaveformView.cpp
 )
 
 target_link_libraries(video-trimmer PRIVATE

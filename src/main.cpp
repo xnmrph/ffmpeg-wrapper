@@ -20,7 +20,10 @@ int main(int argc, char *argv[])
     // libmpv refuses to initialise unless numbers are parsed the "C" way.
     std::setlocale(LC_NUMERIC, "C");
 
-    QQuickStyle::setStyle(QStringLiteral("Fusion"));
+    // Material in its dark, dense variant; the colours come from Theme.qml.
+    qputenv("QT_QUICK_CONTROLS_MATERIAL_THEME", "Dark");
+    qputenv("QT_QUICK_CONTROLS_MATERIAL_VARIANT", "Dense");
+    QQuickStyle::setStyle(QStringLiteral("Material"));
 
     QUrl initialSource;
     const QStringList args = app.arguments();

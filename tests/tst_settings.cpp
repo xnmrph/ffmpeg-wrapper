@@ -16,6 +16,7 @@ private slots:
     void rejectsUnknownEncoder();
     void previewFileName();
     void ffmpegPathOverride();
+    void shortcutKeys();
 };
 
 void TestSettings::initTestCase()
@@ -104,6 +105,24 @@ void TestSettings::ffmpegPathOverride()
     QCOMPARE(TrimJob::ffmpegPath(), QString());
     settings.setFfmpegPath({});
     QCOMPARE(TrimJob::ffmpegPath(), found);
+}
+
+void TestSettings::shortcutKeys()
+{
+    {
+        Settings settings;
+        QCOMPARE(settings.inKey(), QStringLiteral("A"));
+        QCOMPARE(settings.outKey(), QStringLiteral("D"));
+        settings.setInKey("J");
+        settings.setOutKey("L");
+    }
+    Settings again;
+    QCOMPARE(again.inKey(), QStringLiteral("J"));
+    QCOMPARE(again.outKey(), QStringLiteral("L"));
+    again.setOutKey("");
+    QCOMPARE(again.outKey(), QStringLiteral("D"));
+    again.resetShortcuts();
+    QCOMPARE(again.inKey(), QStringLiteral("A"));
 }
 
 QTEST_GUILESS_MAIN(TestSettings)

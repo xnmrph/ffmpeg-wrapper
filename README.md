@@ -1,4 +1,6 @@
-# Video Trimmer
+<p align="center"><img src="packaging/branding/banner.png" alt="mx" width="100%"></p>
+
+# mxCut
 
 A fast, cross-platform desktop app for trimming videos with FFmpeg, one at a
 time or in batches. Built with Qt 6 (QML) and libmpv, so it previews any file
@@ -17,10 +19,10 @@ FFmpeg can read and steps through it frame by frame.
 
 Tagged releases on the [Releases page](https://github.com/xnmrph/ffmpeg-wrapper/releases) carry:
 
-- **Windows:** `Video-Trimmer-<version>-setup.exe`, an installer with a Start menu entry and an
-  uninstaller, or `Video-Trimmer-<version>-windows-x64.zip` to run without installing. Both include
+- **Windows:** `mxCut-<version>-setup.exe`, an installer with a Start menu entry and an
+  uninstaller, or `mxCut-<version>-windows-x64.zip` to run without installing. Both include
   FFmpeg.
-- **Linux:** `Video-Trimmer-<version>-x86_64.AppImage`. Make it executable and run it; FFmpeg is
+- **Linux:** `mxCut-<version>-x86_64.AppImage`. Make it executable and run it; FFmpeg is
   inside. It's built on Ubuntu 24.04, so it needs a distro at least that new (glibc 2.39).
 - **Nix / NixOS:** `nix run github:xnmrph/ffmpeg-wrapper`, or `nix profile install
   github:xnmrph/ffmpeg-wrapper` to keep it with its menu entry. On NixOS, add the flake's
@@ -54,7 +56,7 @@ points you set are kept while you move between videos.
 | Key | Action |
 | --- | --- |
 | Space | Play / pause |
-| I / O | Set in / out point at the playhead |
+| A / D | Set in / out point at the playhead (change them in Settings) |
 | ← / → | Step one frame back / forward |
 | Shift + ← / → | Jump 5 seconds |
 | [ / ] | Jump to the in / out point |

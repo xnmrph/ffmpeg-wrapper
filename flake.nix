@@ -1,5 +1,5 @@
 {
-  description = "Video Trimmer: a fast FFmpeg front end for trimming videos";
+  description = "mxCut: a fast FFmpeg front end for trimming videos";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

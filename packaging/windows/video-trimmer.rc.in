@@ -12,9 +12,9 @@ BEGIN
     BEGIN
         BLOCK "040904B0"
         BEGIN
-            VALUE "FileDescription", "Video Trimmer"
+            VALUE "FileDescription", "mxCut"
             VALUE "FileVersion", "@PROJECT_VERSION@"
-            VALUE "ProductName", "Video Trimmer"
+            VALUE "ProductName", "mxCut"
             VALUE "ProductVersion", "@PROJECT_VERSION@"
             VALUE "OriginalFilename", "video-trimmer.exe"
         END

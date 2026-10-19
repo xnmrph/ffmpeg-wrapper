@@ -6,6 +6,8 @@
 
 namespace {
 const TrimOptions defaults;
+const QString defaultInKey = QStringLiteral("A");
+const QString defaultOutKey = QStringLiteral("D");
 }
 
 Settings::Settings(QObject *parent)
@@ -78,6 +80,12 @@ void Settings::setFfmpegPath(const QString &v)
     emit ffmpegPathChanged();
 }
 
+QString Settings::inKey() const { return value("keys/in", defaultInKey).toString(); }
+void Settings::setInKey(const QString &v) { store("keys/in", v.isEmpty() ? defaultInKey : v); }
+
+QString Settings::outKey() const { return value("keys/out", defaultOutKey).toString(); }
+void Settings::setOutKey(const QString &v) { store("keys/out", v.isEmpty() ? defaultOutKey : v); }
+
 TrimOptions Settings::trimOptions() const
 {
     TrimOptions o;
@@ -109,4 +117,10 @@ void Settings::resetEncoding()
     setSpeed(defaults.speed);
     setCopyAudio(defaults.copyAudio);
     setAudioBitrate(defaults.audioBitrate);
+}
+
+void Settings::resetShortcuts()
+{
+    setInKey(defaultInKey);
+    setOutKey(defaultOutKey);
 }

@@ -42,6 +42,51 @@ Dialog {
         color: Theme.textDim
     }
 
+    // Shows a shortcut key; click it, then press the new key.
+    component KeyField: Button {
+        id: keyField
+        property string key
+        property string otherKey
+        property bool listening: false
+        signal picked(string key)
+
+        // Keys the app already uses for something else.
+        readonly property var reserved: ["SPACE", "Q", "[", "]"]
+
+        function keyName(event) {
+            if (event.key >= Qt.Key_F1 && event.key <= Qt.Key_F12)
+                return "F" + (event.key - Qt.Key_F1 + 1)
+            if ((event.key >= Qt.Key_A && event.key <= Qt.Key_Z) || (event.key >= Qt.Key_0 && event.key <= Qt.Key_9))
+                return String.fromCharCode(event.key)
+            const t = event.text.trim()
+            return t.length === 1 ? t.toUpperCase() : ""
+        }
+
+        Layout.preferredWidth: 130
+        highlighted: listening
+        text: listening ? "Press a key…" : key
+        font.family: Theme.mono
+        onClicked: { listening = true; forceActiveFocus() }
+        onActiveFocusChanged: if (!activeFocus) listening = false
+
+        Keys.onPressed: event => {
+            if (!listening)
+                return
+            event.accepted = true
+            if (event.key === Qt.Key_Escape) {
+                listening = false
+                return
+            }
+            if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))
+                return
+            const name = keyName(event)
+            if (name === "" || reserved.indexOf(name) >= 0 || name === otherKey.toUpperCase())
+                return
+            listening = false
+            picked(name)
+        }
+    }
+
     FolderDialog {
         id: outputFolderDialog
         title: "Save trimmed videos to"
@@ -248,6 +293,38 @@ Dialog {
                     Button {
                         text: "Reset encoding to defaults"
                         onClicked: root.settings.resetEncoding()
+                    }
+                }
+            }
+
+            GroupBox {
+                title: "Keyboard shortcuts"
+                Layout.fillWidth: true
+
+                GridLayout {
+                    anchors.fill: parent
+                    columns: 2
+                    columnSpacing: 12
+                    rowSpacing: 8
+
+                    Label { text: "Set in point" }
+                    KeyField {
+                        key: root.settings.inKey
+                        otherKey: root.settings.outKey
+                        onPicked: key => root.settings.inKey = key
+                    }
+                    Label { text: "Set out point" }
+                    KeyField {
+                        key: root.settings.outKey
+                        otherKey: root.settings.inKey
+                        onPicked: key => root.settings.outKey = key
+                    }
+                    Item { implicitWidth: 1 }
+                    Hint { text: "Click a key, then press the one you want. Esc keeps the old key. Space, Q, [ and ] are already used." }
+                    Item { implicitWidth: 1 }
+                    Button {
+                        text: "Reset to A and D"
+                        onClicked: root.settings.resetShortcuts()
                     }
                 }
             }

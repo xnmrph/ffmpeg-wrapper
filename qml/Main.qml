@@ -25,7 +25,7 @@ ApplicationWindow {
     minimumWidth: 960
     minimumHeight: 600
     visible: true
-    title: player.loaded ? fileName(player.source) + " - Video Trimmer" : "Video Trimmer"
+    title: player.loaded ? fileName(player.source) + " - mxCut" : "mxCut"
     color: Theme.background
 
     Material.theme: Material.Dark
@@ -187,8 +187,8 @@ ApplicationWindow {
     }
 
     Shortcut { sequence: "Space"; onActivated: player.togglePause() }
-    Shortcut { sequence: "I"; onActivated: window.setIn() }
-    Shortcut { sequence: "O"; onActivated: window.setOut() }
+    Shortcut { sequence: appSettings.inKey; onActivated: window.setIn() }
+    Shortcut { sequence: appSettings.outKey; onActivated: window.setOut() }
     Shortcut { sequence: "Left"; onActivated: player.frameBackStep() }
     Shortcut { sequence: "Right"; onActivated: player.frameStep() }
     Shortcut { sequence: "Shift+Left"; onActivated: window.nudge(-5) }
@@ -220,17 +220,15 @@ ApplicationWindow {
             anchors.rightMargin: 10
             spacing: 6
 
-            Icon {
-                path: Icons.cut
-                color: Theme.accent
-                size: 20
-            }
-            Text {
-                text: "Video Trimmer"
-                color: Theme.text
-                font.pixelSize: 14
-                font.weight: Font.DemiBold
-                Layout.rightMargin: 14
+            Image {
+                source: "qrc:/packaging/branding/logo.png"
+                sourceSize.height: 48
+                Layout.preferredHeight: 24
+                Layout.preferredWidth: 24 * implicitWidth / implicitHeight
+                Layout.rightMargin: 18
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                mipmap: true
             }
             IconButton {
                 text: "Open video"
@@ -256,7 +254,8 @@ ApplicationWindow {
             }
             IconButton {
                 iconPath: Icons.keyboard
-                tip: "Space  play / pause\nI / O  set in / out\n← / →  previous / next frame\n"
+                tip: "Space  play / pause\n" + appSettings.inKey + " / " + appSettings.outKey + "  set in / out\n"
+                     + "← / →  previous / next frame\n"
                      + "Shift + ← / →  jump 5 seconds\n[ / ]  go to in / out\n"
                      + "Q  add to queue (folder)\n↑ / ↓  previous / next video (folder)\nCtrl + ,  settings"
             }
@@ -405,8 +404,8 @@ ApplicationWindow {
                     spacing: 4
                     enabled: player.loaded
 
-                    IconButton { iconPath: Icons.markIn; tip: "Set in point (I)"; onClicked: window.setIn() }
-                    IconButton { iconPath: Icons.markOut; tip: "Set out point (O)"; onClicked: window.setOut() }
+                    IconButton { iconPath: Icons.markIn; tip: "Set in point (" + appSettings.inKey + ")"; onClicked: window.setIn() }
+                    IconButton { iconPath: Icons.markOut; tip: "Set out point (" + appSettings.outKey + ")"; onClicked: window.setOut() }
                     Item { width: 12; height: 1 }
                     IconButton { iconPath: Icons.goToIn; tip: "Go to in point ([)"; onClicked: player.seek(window.inPoint, true) }
                     IconButton { iconPath: Icons.stepBack; tip: "Previous frame (←)"; onClicked: player.frameBackStep() }

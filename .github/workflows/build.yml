@@ -9,7 +9,7 @@ jobs:
   linux:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -28,7 +28,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
@@ -42,16 +42,26 @@ jobs:
             mingw-w64-ucrt-x86_64-qt6-declarative
             mingw-w64-ucrt-x86_64-mpv
             mingw-w64-ucrt-x86_64-ffmpeg
+            mingw-w64-ucrt-x86_64-qt6-tools
       - name: Build
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build build
+          # Raw logs are not always reachable, so surface compiler errors as annotations.
+          set -o pipefail
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release 2>&1 | tee build.log \
+            && cmake --build build 2>&1 | tee -a build.log \
+            || { grep -iE "error|fatal" build.log | head -20 | sed 's/^/::error::/'; exit 1; }
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Package
+        run: bash .github/scripts/package-windows.sh build dist/video-trimmer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: video-trimmer-windows-x64
+          path: dist/
 
   nix:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
       - run: nix build -L

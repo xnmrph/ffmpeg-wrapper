@@ -220,10 +220,14 @@ ApplicationWindow {
             anchors.rightMargin: 10
             spacing: 6
 
-            Icon {
-                path: Icons.cut
-                color: Theme.accent
-                size: 20
+            Image {
+                source: "qrc:/packaging/branding/logo.png"
+                sourceSize.height: 48
+                Layout.preferredHeight: 24
+                Layout.preferredWidth: 24 * implicitWidth / implicitHeight
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                mipmap: true
             }
             Text {
                 text: "Video Trimmer"

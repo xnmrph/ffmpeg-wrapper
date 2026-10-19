@@ -1,3 +1,5 @@
+<p align="center"><img src="packaging/branding/banner.png" alt="mx" width="100%"></p>
+
 # Video Trimmer
 
 A fast, cross-platform desktop app for trimming videos with FFmpeg, one at a

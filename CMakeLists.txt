@@ -67,10 +67,12 @@ target_link_libraries(video-trimmer PRIVATE
 
 target_include_directories(video-trimmer PRIVATE src)
 
-# Window icon, built into the program.
+# Window icon and header logo, built into the program.
 qt_add_resources(video-trimmer app_icon
     PREFIX /
-    FILES packaging/icons/video-trimmer-256.png
+    FILES
+        packaging/icons/video-trimmer-256.png
+        packaging/branding/logo.png
 )
 target_compile_definitions(video-trimmer PRIVATE APP_VERSION="${PROJECT_VERSION}")
 
@@ -94,8 +96,9 @@ if(UNIX AND NOT APPLE)
     # App menu entry and icon on Linux desktops.
     install(FILES packaging/linux/video-trimmer.desktop
         DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-    install(FILES packaging/icons/video-trimmer.svg
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+    install(FILES packaging/icons/video-trimmer-512.png
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps
+        RENAME video-trimmer.png)
     install(FILES packaging/icons/video-trimmer-256.png
         DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
         RENAME video-trimmer.png)

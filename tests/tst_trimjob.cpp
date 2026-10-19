@@ -1,5 +1,7 @@
 #include "TrimJob.h"
+#include "testclip.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QProcess>
 #include <QSignalSpy>
@@ -13,11 +15,15 @@ class TestTrimJob : public QObject
 
 private slots:
     void initTestCase();
-    void defaultOutputPath();
+    void outputPathFor();
+    void friendlyErrors();
     void fastTrimSnapsToKeyframe();
     void accurateTrimIsFrameExact();
     void rejectsEmptyRange();
     void cancelRemovesPartialOutput();
+    void encoderOptions();
+    void customOutputFolder();
+    void reportsUnreadableInput();
 
 private:
     double probeDuration(const QString &path);
@@ -35,16 +41,7 @@ void TestTrimJob::initTestCase()
 
     // 20 s at 30 fps with a keyframe every 2 s, so fast and accurate cuts differ.
     m_clip = m_dir.filePath("clip.mp4");
-    QProcess p;
-    p.start(TrimJob::ffmpegPath(), {
-        "-hide_banner", "-loglevel", "error", "-y",
-        "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30:duration=20",
-        "-f", "lavfi", "-i", "sine=frequency=440:duration=20",
-        "-c:v", "libx264", "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
-        "-c:a", "aac", "-shortest", m_clip,
-    });
-    QVERIFY(p.waitForFinished(60000));
-    QCOMPARE(p.exitCode(), 0);
+    QVERIFY(makeTestClip(m_clip));
 }
 
 double TestTrimJob::probeDuration(const QString &path)
@@ -65,21 +62,44 @@ bool TestTrimJob::runTrim(TrimJob &job)
     return done.count() > 0 || done.wait(60000);
 }
 
-void TestTrimJob::defaultOutputPath()
+void TestTrimJob::outputPathFor()
 {
-    const QString fast = TrimJob::defaultOutputPath(m_clip, TrimJob::Fast);
+    TrimOptions options;
+    const QString fast = TrimJob::outputPathFor(m_clip, TrimJob::Fast, options);
     QCOMPARE(QFileInfo(fast).fileName(), QStringLiteral("clip_trim.mp4"));
 
     QFile existing(fast);
     QVERIFY(existing.open(QIODevice::WriteOnly));
     existing.close();
-    QCOMPARE(QFileInfo(TrimJob::defaultOutputPath(m_clip, TrimJob::Fast)).fileName(),
+    QCOMPARE(QFileInfo(TrimJob::outputPathFor(m_clip, TrimJob::Fast, options)).fileName(),
              QStringLiteral("clip_trim_2.mp4"));
+    options.overwrite = true;
+    QCOMPARE(TrimJob::outputPathFor(m_clip, TrimJob::Fast, options), fast);
     QFile::remove(fast);
 
-    QCOMPARE(QFileInfo(TrimJob::defaultOutputPath("/x/a.webm", TrimJob::Accurate)).suffix(), QStringLiteral("mp4"));
-    QCOMPARE(QFileInfo(TrimJob::defaultOutputPath("/x/a.mkv", TrimJob::Accurate)).suffix(), QStringLiteral("mkv"));
-    QCOMPARE(QFileInfo(TrimJob::defaultOutputPath("/x/a.webm", TrimJob::Fast)).suffix(), QStringLiteral("webm"));
+    // Never the source itself, even when overwriting.
+    options.filenamePattern = QStringLiteral("{name}");
+    QCOMPARE(QFileInfo(TrimJob::outputPathFor(m_clip, TrimJob::Fast, options)).fileName(),
+             QStringLiteral("clip_2.mp4"));
+
+    options = {};
+    QCOMPARE(QFileInfo(TrimJob::outputPathFor("/x/a.webm", TrimJob::Accurate, options)).suffix(), QStringLiteral("mp4"));
+    QCOMPARE(QFileInfo(TrimJob::outputPathFor("/x/a.mkv", TrimJob::Accurate, options)).suffix(), QStringLiteral("mkv"));
+    QCOMPARE(QFileInfo(TrimJob::outputPathFor("/x/a.webm", TrimJob::Fast, options)).suffix(), QStringLiteral("webm"));
+
+    options.outputFolder = m_dir.filePath("out");
+    options.filenamePattern = QStringLiteral("{name} {in}-{out} {mode}: <cut>?");
+    QCOMPARE(TrimJob::outputPathFor("/x/a.mov", TrimJob::Accurate, options, 83.5, 3725.25),
+             QDir(m_dir.filePath("out")).filePath("a 00-01-23.500-01-02-05.250 accurate_ _cut__.mp4"));
+}
+
+void TestTrimJob::friendlyErrors()
+{
+    QVERIFY(TrimJob::friendlyError("[h264_nvenc @ 0x1] Cannot load libnvidia-encode.so.1", "h264_nvenc").contains("GPU"));
+    QVERIFY(TrimJob::friendlyError("Unknown encoder 'libfoo'", "libfoo").contains("libfoo"));
+    QVERIFY(TrimJob::friendlyError("x.mp4: Invalid data found when processing input").contains("can't read"));
+    QVERIFY(TrimJob::friendlyError("av_interleaved_write_frame(): No space left on device").contains("disk is full"));
+    QCOMPARE(TrimJob::friendlyError("line one\nsomething odd happened\n"), QStringLiteral("something odd happened"));
 }
 
 void TestTrimJob::fastTrimSnapsToKeyframe()
@@ -138,6 +158,72 @@ void TestTrimJob::cancelRemovesPartialOutput()
     job.cancel();
     QCOMPARE(job.state(), TrimJob::Cancelled);
     QVERIFY(!QFileInfo::exists(job.output()));
+}
+
+void TestTrimJob::encoderOptions()
+{
+    TrimJob job;
+    TrimOptions options;
+    options.videoEncoder = QStringLiteral("libx265");
+    options.quality = 28;
+    options.copyAudio = true;
+    job.setOptions(options);
+    job.setSource(QUrl::fromLocalFile(m_clip));
+    job.setInPoint(2.0);
+    job.setOutPoint(4.0);
+    job.setMode(TrimJob::Accurate);
+    job.setOutput(m_dir.filePath("hevc.mp4"));
+
+    const QStringList args = job.arguments();
+    QVERIFY(args.contains("libx265"));
+    QCOMPARE(args.at(args.indexOf("-crf") + 1), QStringLiteral("28"));
+    QCOMPARE(args.at(args.indexOf("-c:a") + 1), QStringLiteral("copy"));
+    QVERIFY(args.contains("hvc1"));
+
+    if (!QProcess::execute(TrimJob::ffmpegPath(), {"-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                                                   "color=s=64x64:d=0.1", "-c:v", "libx265", "-f", "null", "-"})) {
+        QVERIFY(runTrim(job));
+        QCOMPARE(job.state(), TrimJob::Finished);
+        QProcess p;
+        p.start(QStandardPaths::findExecutable("ffprobe"), {"-v", "error", "-select_streams", "v:0",
+                                                            "-show_entries", "stream=codec_name", "-of", "csv=p=0", job.output()});
+        p.waitForFinished(10000);
+        QCOMPARE(p.readAllStandardOutput().trimmed(), QByteArray("hevc"));
+    }
+}
+
+void TestTrimJob::customOutputFolder()
+{
+    TrimJob job;
+    TrimOptions options;
+    options.outputFolder = m_dir.filePath("nested/out");
+    options.filenamePattern = QStringLiteral("{name}-{mode}");
+    job.setOptions(options);
+    job.setSource(QUrl::fromLocalFile(m_clip));
+    job.setInPoint(1.0);
+    job.setOutPoint(2.0);
+    QVERIFY(runTrim(job));
+    QCOMPARE(job.state(), TrimJob::Finished);
+    QCOMPARE(job.output(), QDir(m_dir.filePath("nested/out")).filePath("clip-fast.mp4"));
+    QVERIFY(QFileInfo::exists(job.output()));
+}
+
+void TestTrimJob::reportsUnreadableInput()
+{
+    const QString junk = m_dir.filePath("junk.mp4");
+    QFile f(junk);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("this is not a video");
+    f.close();
+
+    TrimJob job;
+    job.setSource(QUrl::fromLocalFile(junk));
+    job.setInPoint(0.0);
+    job.setOutPoint(1.0);
+    QVERIFY(runTrim(job));
+    QCOMPARE(job.state(), TrimJob::Failed);
+    QVERIFY2(job.errorString().contains("can't read"), qPrintable(job.errorString()));
+    QVERIFY(!job.errorDetails().isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestTrimJob)

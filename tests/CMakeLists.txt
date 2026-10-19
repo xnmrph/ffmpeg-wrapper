@@ -16,6 +16,8 @@ target_link_libraries(trimmer_core PUBLIC Qt6::Core Qt6::Qml)
 foreach(test tst_trimjob tst_exportqueue tst_videofoldermodel tst_settings tst_encoderprobe)
     qt_add_executable(${test} ${test}.cpp testclip.h)
     target_link_libraries(${test} PRIVATE trimmer_core Qt6::Test)
+    # qt_add_executable makes Windows GUI programs, which print nothing.
+    set_target_properties(${test} PROPERTIES WIN32_EXECUTABLE FALSE)
     add_test(NAME ${test} COMMAND ${test})
     set_tests_properties(${test} PROPERTIES TIMEOUT 300)
 endforeach()

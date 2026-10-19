@@ -8,8 +8,22 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 OpenGL)
 include(GNUInstallDirs)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(MPV REQUIRED IMPORTED_TARGET mpv)
+# pkg-config only supplies hints: under MSYS2 it can report POSIX paths such as
+# /ucrt64/include that a native Windows CMake cannot use directly.
+find_package(PkgConfig QUIET)
+if(PKG_CONFIG_FOUND)
+    pkg_check_modules(PC_MPV QUIET mpv)
+endif()
+find_path(MPV_INCLUDE_DIR mpv/client.h HINTS ${PC_MPV_INCLUDE_DIRS})
+find_library(MPV_LIBRARY NAMES mpv libmpv HINTS ${PC_MPV_LIBRARY_DIRS})
+if(NOT MPV_INCLUDE_DIR OR NOT MPV_LIBRARY)
+    message(FATAL_ERROR "libmpv was not found. Install its development package.")
+endif()
+add_library(mpv::mpv UNKNOWN IMPORTED)
+set_target_properties(mpv::mpv PROPERTIES
+    IMPORTED_LOCATION "${MPV_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${MPV_INCLUDE_DIR}"
+)
 
 qt_standard_project_setup()
 
@@ -31,7 +45,7 @@ qt_add_qml_module(video-trimmer
 
 target_link_libraries(video-trimmer PRIVATE
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::OpenGL
-    PkgConfig::MPV
+    mpv::mpv
 )
 
 target_include_directories(video-trimmer PRIVATE src)

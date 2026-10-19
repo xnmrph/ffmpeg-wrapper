@@ -55,7 +55,13 @@ jobs:
           # Surface failing checks as annotations, since raw logs are not always reachable.
           set -o pipefail
           ctest --test-dir build --output-on-failure 2>&1 | tee test.log \
-            || { grep -E "FAIL|Actual|Expected|Loc:|Timeout|Exception|\*\*\*" test.log | head -40 | sed 's/^/::error::/'; exit 1; }
+            || { # Re-run failing tests with QtTest's report in a file, as console output can go missing,
+                 # and post each report as one annotation (newlines encoded as %0A).
+                 for t in $(sed -n 's/^.*[0-9] - \(tst_[a-z_]*\) .*$/\1/p' test.log); do
+                   code=0; ./build/tests/$t.exe -o report.txt,txt || code=$?
+                   echo "::error::$t exited with $code%0A$(grep -vE '^(PASS|Config|Totals|\*)' report.txt | head -60 | tr -d '\r' | sed ':a;N;$!ba;s/\n/%0A/g')"
+                 done
+                 exit 1; }
       - name: Package
         run: bash .github/scripts/package-windows.sh build dist/video-trimmer
       - uses: actions/upload-artifact@v4

@@ -38,6 +38,8 @@ public:
         OutputRole,
         ErrorRole,
         ErrorDetailsRole,
+        SegmentCountRole,
+        KeptDurationRole,
     };
 
     explicit ExportQueue(QObject *parent = nullptr);
@@ -58,8 +60,10 @@ public:
     void setSettings(Settings *settings);
 
     // Queues a trim. A video that is already waiting in the queue (or failed,
-    // or was cancelled) gets its cut updated instead of a second entry.
-    Q_INVOKABLE void add(const QUrl &source, double inPoint, double outPoint, int mode);
+    // or was cancelled) gets its cut updated instead of a second entry. With
+    // two or more segments ({inPoint, outPoint} objects) they are joined.
+    Q_INVOKABLE void add(const QUrl &source, double inPoint, double outPoint, int mode,
+                         const QVariantList &segments = {});
     Q_INVOKABLE void remove(int row);
     Q_INVOKABLE void clearFinished();
     Q_INVOKABLE void start();

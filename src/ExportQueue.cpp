@@ -50,6 +50,10 @@ QVariant ExportQueue::data(const QModelIndex &index, int role) const
         return job->errorString();
     case ErrorDetailsRole:
         return job->errorDetails();
+    case SegmentCountRole:
+        return qMax<qsizetype>(1, job->segments().size());
+    case KeptDurationRole:
+        return job->keptDuration();
     }
     return {};
 }
@@ -68,6 +72,8 @@ QHash<int, QByteArray> ExportQueue::roleNames() const
         {OutputRole, "output"},
         {ErrorRole, "errorString"},
         {ErrorDetailsRole, "errorDetails"},
+        {SegmentCountRole, "segmentCount"},
+        {KeptDurationRole, "keptDuration"},
     };
 }
 
@@ -90,7 +96,7 @@ void ExportQueue::setSettings(Settings *settings)
     emit settingsChanged();
 }
 
-void ExportQueue::add(const QUrl &source, double inPoint, double outPoint, int mode)
+void ExportQueue::add(const QUrl &source, double inPoint, double outPoint, int mode, const QVariantList &segments)
 {
     TrimJob *job = jobFor(source);
     const bool reuse = job && job->state() != TrimJob::Running && job->state() != TrimJob::Finished;
@@ -111,10 +117,12 @@ void ExportQueue::add(const QUrl &source, double inPoint, double outPoint, int m
     job->reset();
     job->setInPoint(inPoint);
     job->setOutPoint(outPoint);
+    job->setSegments(segments.size() >= 2 ? segments : QVariantList{});
     job->setMode(TrimJob::Mode(mode));
 
     if (reuse) {
-        onJobChanged(job, {InPointRole, OutPointRole, ModeRole, StateRole, ProgressRole, OutputRole, ErrorRole, ErrorDetailsRole});
+        onJobChanged(job, {InPointRole, OutPointRole, ModeRole, StateRole, ProgressRole, OutputRole, ErrorRole,
+                           ErrorDetailsRole, SegmentCountRole, KeptDurationRole});
     } else {
         beginInsertRows({}, int(m_jobs.size()), int(m_jobs.size()));
         m_jobs.append(job);

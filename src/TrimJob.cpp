@@ -8,6 +8,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QTimer>
 
@@ -75,6 +77,20 @@ bool sameFile(const QString &a, const QString &b)
     return QDir::cleanPath(fa.absoluteFilePath()).compare(QDir::cleanPath(fb.absoluteFilePath()), cs) == 0;
 }
 
+// Whether the file has an audio stream, from FFmpeg's description of it.
+bool hasAudio(const QString &ffmpeg, const QString &input)
+{
+    QProcess p;
+    p.start(ffmpeg, {QStringLiteral("-hide_banner"), QStringLiteral("-nostdin"), QStringLiteral("-i"), input});
+    if (!p.waitForFinished(15000)) {
+        p.kill();
+        p.waitForFinished(2000);
+        return true;
+    }
+    static const QRegularExpression audio(QStringLiteral("Stream #\\d+:\\d+.*: Audio:"));
+    return audio.match(QString::fromUtf8(p.readAllStandardError())).hasMatch();
+}
+
 } // namespace
 
 TrimJob::TrimJob(QObject *parent)
@@ -121,6 +137,49 @@ void TrimJob::setOutPoint(double seconds)
         return;
     m_outPoint = seconds;
     emit outPointChanged();
+}
+
+QVariantList TrimJob::segments() const
+{
+    QVariantList list;
+    for (const Range &r : m_segments)
+        list << QVariantMap{{QStringLiteral("inPoint"), r.in}, {QStringLiteral("outPoint"), r.out}};
+    return list;
+}
+
+void TrimJob::setSegments(const QVariantList &segments)
+{
+    QList<Range> ranges;
+    for (const QVariant &v : segments) {
+        const QVariantMap m = v.toMap();
+        ranges.append({m.value(QStringLiteral("inPoint")).toDouble(), m.value(QStringLiteral("outPoint")).toDouble()});
+    }
+    std::sort(ranges.begin(), ranges.end(), [](const Range &a, const Range &b) { return a.in < b.in; });
+    m_segments = ranges;
+    // The overall span names the file ({in} and {out}) and shows in the queue.
+    if (!ranges.isEmpty()) {
+        double first = ranges.first().in, last = ranges.first().out;
+        for (const Range &r : ranges)
+            last = qMax(last, r.out);
+        setInPoint(first);
+        setOutPoint(last);
+    }
+    emit segmentsChanged();
+}
+
+QList<TrimJob::Range> TrimJob::ranges() const
+{
+    if (m_segments.size() >= 2)
+        return m_segments;
+    return {{m_inPoint, m_outPoint}};
+}
+
+double TrimJob::keptDuration() const
+{
+    double total = 0;
+    for (const Range &r : ranges())
+        total += qMax(0.0, r.out - r.in);
+    return total;
 }
 
 void TrimJob::setMode(Mode mode)
@@ -228,13 +287,30 @@ QString TrimJob::friendlyError(const QString &out, const QString &encoder)
     return lines.isEmpty() ? QString() : lines.last().trimmed();
 }
 
+namespace {
+bool isMp4Like(const QString &path)
+{
+    return path.endsWith(QLatin1String(".mp4"), Qt::CaseInsensitive)
+           || path.endsWith(QLatin1String(".mov"), Qt::CaseInsensitive)
+           || path.endsWith(QLatin1String(".m4v"), Qt::CaseInsensitive);
+}
+
+const QStringList progressArgs{
+    QStringLiteral("-hide_banner"), QStringLiteral("-nostdin"), QStringLiteral("-y"),
+    QStringLiteral("-nostats"), QStringLiteral("-progress"), QStringLiteral("pipe:1"),
+};
+} // namespace
+
 QStringList TrimJob::arguments() const
 {
+    return argumentsFor({m_inPoint, m_outPoint}, m_output);
+}
+
+QStringList TrimJob::argumentsFor(const Range &range, const QString &output) const
+{
     const QString input = m_source.isLocalFile() ? m_source.toLocalFile() : m_source.toString();
-    const bool mkv = m_output.endsWith(QLatin1String(".mkv"), Qt::CaseInsensitive);
-    const bool mp4Like = m_output.endsWith(QLatin1String(".mp4"), Qt::CaseInsensitive)
-                         || m_output.endsWith(QLatin1String(".mov"), Qt::CaseInsensitive)
-                         || m_output.endsWith(QLatin1String(".m4v"), Qt::CaseInsensitive);
+    const bool mkv = output.endsWith(QLatin1String(".mkv"), Qt::CaseInsensitive);
+    const bool mp4Like = isMp4Like(output);
 
     QStringList args{
         QStringLiteral("-hide_banner"), QStringLiteral("-nostdin"), QStringLiteral("-y"),
@@ -244,9 +320,9 @@ QStringList TrimJob::arguments() const
         args << Encoders::inputArgs(m_options.videoEncoder);
     args << QStringList{
         // Seeking before -i is fast, and frame-exact when re-encoding.
-        QStringLiteral("-ss"), seconds(m_inPoint),
+        QStringLiteral("-ss"), seconds(range.in),
         QStringLiteral("-i"), input,
-        QStringLiteral("-t"), seconds(m_outPoint - m_inPoint),
+        QStringLiteral("-t"), seconds(range.out - range.in),
         // Capital V skips cover art, which is stored as a video stream.
         QStringLiteral("-map"), QStringLiteral("0:V?"),
         QStringLiteral("-map"), QStringLiteral("0:a?"),
@@ -274,6 +350,68 @@ QStringList TrimJob::arguments() const
     if (mp4Like)
         args << QStringLiteral("-movflags") << QStringLiteral("+faststart");
 
+    args << output;
+    return args;
+}
+
+// Accurate mode with several parts: each part is its own input, and FFmpeg's
+// concat filter joins them before encoding, all in one run.
+QStringList TrimJob::joinedAccurateArguments(const QList<Range> &ranges, bool withAudio) const
+{
+    const QString input = m_source.isLocalFile() ? m_source.toLocalFile() : m_source.toString();
+    QStringList args = progressArgs;
+    args << Encoders::inputArgs(m_options.videoEncoder);
+    QString graph;
+    for (qsizetype i = 0; i < ranges.size(); ++i) {
+        args << QStringLiteral("-ss") << seconds(ranges[i].in)
+             << QStringLiteral("-t") << seconds(ranges[i].out - ranges[i].in)
+             << QStringLiteral("-i") << input;
+        graph += QStringLiteral("[%1:v:0]").arg(i);
+        if (withAudio)
+            graph += QStringLiteral("[%1:a:0]").arg(i);
+    }
+    graph += QStringLiteral("concat=n=%1:v=1:a=%2[v]").arg(ranges.size()).arg(withAudio ? 1 : 0);
+    if (withAudio)
+        graph += QStringLiteral("[a]");
+
+    // An encoder's own video filter (GPU upload) moves to the end of the graph.
+    QStringList video = Encoders::videoArgs(m_options.videoEncoder, m_options.quality, m_options.speed,
+                                            isMp4Like(m_output));
+    const qsizetype vf = video.indexOf(QStringLiteral("-vf"));
+    QString videoOut = QStringLiteral("[v]");
+    if (vf >= 0 && vf + 1 < video.size()) {
+        graph += QStringLiteral(";[v]%1[vf]").arg(video[vf + 1]);
+        videoOut = QStringLiteral("[vf]");
+        video.remove(vf, 2);
+    }
+
+    args << QStringLiteral("-filter_complex") << graph
+         << QStringLiteral("-map") << videoOut;
+    if (withAudio)
+        args << QStringLiteral("-map") << QStringLiteral("[a]");
+    args << QStringLiteral("-map_metadata") << QStringLiteral("0") << video;
+    // Joined audio is always re-encoded; it can't be copied through a filter.
+    if (withAudio)
+        args << QStringLiteral("-c:a") << QStringLiteral("aac")
+             << QStringLiteral("-b:a") << QStringLiteral("%1k").arg(m_options.audioBitrate);
+    args << QStringLiteral("-sn");
+    if (isMp4Like(m_output))
+        args << QStringLiteral("-movflags") << QStringLiteral("+faststart");
+    args << m_output;
+    return args;
+}
+
+// Fast mode with several parts: the copied parts are joined without
+// re-encoding by FFmpeg's concat demuxer.
+QStringList TrimJob::concatArguments(const QString &listFile) const
+{
+    QStringList args = progressArgs;
+    args << QStringLiteral("-f") << QStringLiteral("concat") << QStringLiteral("-safe") << QStringLiteral("0")
+         << QStringLiteral("-i") << listFile
+         << QStringLiteral("-map") << QStringLiteral("0")
+         << QStringLiteral("-c") << QStringLiteral("copy");
+    if (isMp4Like(m_output))
+        args << QStringLiteral("-movflags") << QStringLiteral("+faststart");
     args << m_output;
     return args;
 }
@@ -294,8 +432,11 @@ void TrimJob::start()
         return fail(tr("The video could not be found."));
     if (!inputInfo.isReadable())
         return fail(tr("The video can't be read. Check its permissions."));
-    if (m_outPoint - m_inPoint <= 0)
-        return fail(tr("The out point must be after the in point."));
+    const QList<Range> parts = ranges();
+    for (const Range &r : parts) {
+        if (r.out - r.in <= 0)
+            return fail(tr("The out point must be after the in point."));
+    }
     const QString ffmpeg = ffmpegPath();
     if (ffmpeg.isEmpty())
         return fail(tr("FFmpeg was not found. Install it, or set its location in Settings."));
@@ -312,6 +453,48 @@ void TrimJob::start()
     if (!QFileInfo(outputInfo.absolutePath()).isWritable())
         return fail(tr("Can't write to the output folder %1.").arg(QDir::toNativeSeparators(outputInfo.absolutePath())));
 
+    m_ffmpeg = ffmpeg;
+    m_steps.clear();
+    m_step = 0;
+    removeTemporaryFiles();
+    const double total = keptDuration();
+    if (parts.size() == 1) {
+        m_steps.append({arguments(), 0, 1 / total});
+    } else if (m_mode == Accurate) {
+        m_steps.append({joinedAccurateArguments(parts, hasAudio(ffmpeg, input)), 0, 1 / total});
+    } else {
+        // Copy each part to a file of its own, then join them. The join is
+        // quick, so it gets the last tenth of the progress bar.
+        const QFileInfo out(m_output);
+        QString list;
+        double done = 0;
+        for (qsizetype i = 0; i < parts.size(); ++i) {
+            const QString part = out.dir().filePath(QStringLiteral("%1.mxcut-part%2.%3")
+                                                        .arg(out.completeBaseName()).arg(i + 1).arg(out.suffix()));
+            m_temporaryFiles << part;
+            m_steps.append({argumentsFor(parts[i], part), 0.9 * done / total, 0.9 / total});
+            done += parts[i].out - parts[i].in;
+            // The concat list quotes paths with single quotes; escape any in the path.
+            QString quoted = QFileInfo(part).absoluteFilePath();
+            quoted.replace(QLatin1String("'"), QLatin1String("'\\''"));
+            list += QStringLiteral("file '%1'\n").arg(quoted);
+        }
+        const QString listFile = out.dir().filePath(out.completeBaseName() + QStringLiteral(".mxcut-list.txt"));
+        QSaveFile f(listFile);
+        if (!f.open(QIODevice::WriteOnly) || f.write(list.toUtf8()) < 0 || !f.commit())
+            return fail(tr("Can't write to the output folder %1.").arg(QDir::toNativeSeparators(out.absolutePath())));
+        m_temporaryFiles << listFile;
+        m_steps.append({concatArguments(listFile), 0.9, 0.1 / total});
+    }
+
+    setState(Running);
+    runStep();
+}
+
+void TrimJob::runStep()
+{
+    m_stdoutBuffer.clear();
+    m_stderrTail.clear();
     m_process = new QProcess(this);
     connect(m_process, &QProcess::readyReadStandardOutput, this, &TrimJob::readProgress);
     connect(m_process, &QProcess::readyReadStandardError, this, [this] {
@@ -325,8 +508,14 @@ void TrimJob::start()
             onProcessFinished(-1, QProcess::CrashExit);
     });
 
-    setState(Running);
-    m_process->start(ffmpeg, arguments());
+    m_process->start(m_ffmpeg, m_steps[m_step].arguments);
+}
+
+void TrimJob::removeTemporaryFiles()
+{
+    for (const QString &path : std::as_const(m_temporaryFiles))
+        QFile::remove(path);
+    m_temporaryFiles.clear();
 }
 
 void TrimJob::cancel()
@@ -338,6 +527,7 @@ void TrimJob::cancel()
     m_process->waitForFinished(2000);
     m_process->deleteLater();
     QFile::remove(m_output);
+    removeTemporaryFiles();
     setState(Cancelled);
     emit finished();
 }
@@ -360,7 +550,7 @@ QUrl TrimJob::outputFolderUrl() const
 void TrimJob::readProgress()
 {
     m_stdoutBuffer += m_process->readAllStandardOutput();
-    const double length = m_outPoint - m_inPoint;
+    const Step &step = m_steps[m_step];
     qsizetype newline;
     while ((newline = m_stdoutBuffer.indexOf('\n')) >= 0) {
         const QByteArray line = m_stdoutBuffer.left(newline).trimmed();
@@ -368,8 +558,8 @@ void TrimJob::readProgress()
         if (line.startsWith("out_time_us=")) {
             bool ok = false;
             const qint64 us = line.mid(12).toLongLong(&ok);
-            if (ok && length > 0)
-                setProgress(qBound(0.0, us / 1e6 / length, 1.0));
+            if (ok)
+                setProgress(qBound(0.0, step.progressStart + us / 1e6 * step.progressPerSecond, 1.0));
         }
     }
 }
@@ -380,6 +570,13 @@ void TrimJob::onProcessFinished(int exitCode, QProcess::ExitStatus status)
         return;
     if (m_process)
         m_process->deleteLater();
+
+    if (status == QProcess::NormalExit && exitCode == 0 && m_step + 1 < m_steps.size()) {
+        ++m_step;
+        runStep();
+        return;
+    }
+    removeTemporaryFiles();
 
     if (status == QProcess::NormalExit && exitCode == 0) {
         setProgress(1);

@@ -14,8 +14,20 @@ ApplicationWindow {
     property int trimMode: TrimJob.Fast
     // Folder mode adds the file sidebar and the export queue.
     property bool folderMode: false
-    // In and out points set on each video this session, keyed by URL, so
-    // moving between videos in a folder doesn't lose them.
+    // The parts of the video to keep, as {inPoint, outPoint}; there is always
+    // at least one. inPoint and outPoint are the active one's, which the keys,
+    // buttons and handles change.
+    property var segments: [{ inPoint: 0, outPoint: 0 }]
+    property int activeSegment: 0
+    readonly property int maxSegments: Theme.segmentColors.length
+    readonly property real keptDuration: {
+        let total = 0
+        for (const s of segments)
+            total += Math.max(0, s.outPoint - s.inPoint)
+        return total
+    }
+    // Segments set on each video this session, keyed by URL, so moving
+    // between videos in a folder doesn't lose them.
     property var cuts: ({})
     readonly property bool busy: job.running || exportQueue.running
     readonly property real minimumLength: 0.04
@@ -100,8 +112,51 @@ ApplicationWindow {
 
     function rememberCut() {
         if (player.loaded && player.duration > 0)
-            cuts[String(player.source)] = { inPoint: inPoint, outPoint: outPoint }
+            cuts[String(player.source)] = { segments: segments, active: activeSegment }
     }
+
+    // Keep the active segment in step with inPoint and outPoint.
+    property bool loadingSegment: false
+    onInPointChanged: storeActiveSegment()
+    onOutPointChanged: storeActiveSegment()
+    function storeActiveSegment() {
+        if (loadingSegment || !segments[activeSegment])
+            return
+        const s = segments.slice()
+        s[activeSegment] = { inPoint: inPoint, outPoint: outPoint }
+        segments = s
+    }
+    function loadSegments(list, active) {
+        loadingSegment = true
+        segments = list
+        activeSegment = Math.max(0, Math.min(active, list.length - 1))
+        inPoint = list[activeSegment].inPoint
+        outPoint = list[activeSegment].outPoint
+        loadingSegment = false
+    }
+    function selectSegment(i) {
+        if (i >= 0 && i < segments.length && i !== activeSegment)
+            loadSegments(segments, i)
+        rememberCut()
+    }
+    // A new segment starts at the playhead and runs to the end, like the first.
+    function addSegment() {
+        if (!player.loaded || player.duration <= 0 || segments.length >= maxSegments)
+            return
+        const start = Math.min(player.position, player.duration - minimumLength)
+        loadSegments(segments.concat([{ inPoint: start, outPoint: player.duration }]), segments.length)
+        rememberCut()
+    }
+    function removeSegment(i) {
+        if (segments.length <= 1)
+            return
+        const s = segments.slice()
+        s.splice(i, 1)
+        loadSegments(s, activeSegment > i ? activeSegment - 1 : Math.min(activeSegment, s.length - 1))
+        rememberCut()
+    }
+    // What the trim keeps: nothing extra for one segment, all of them for more.
+    function jobSegments() { return segments.length > 1 ? segments : [] }
 
     function setIn() { inPoint = Math.min(player.position, outPoint - minimumLength); rememberCut() }
     function setOut() { outPoint = Math.max(player.position, inPoint + minimumLength); rememberCut() }
@@ -114,7 +169,7 @@ ApplicationWindow {
         if (!folderMode || !player.loaded)
             return
         rememberCut()
-        exportQueue.add(player.source, inPoint, outPoint, trimMode)
+        exportQueue.add(player.source, inPoint, outPoint, trimMode, jobSegments())
         if (autoAdvance.checked)
             stepVideo(1)
     }
@@ -127,6 +182,7 @@ ApplicationWindow {
         job.source = player.source
         job.inPoint = inPoint
         job.outPoint = outPoint
+        job.segments = jobSegments()
         job.mode = trimMode
         job.output = ""
         job.applySettings(appSettings)
@@ -146,14 +202,13 @@ ApplicationWindow {
             const saved = fresh ? undefined : window.cuts[String(player.source)]
             const queued = fresh ? null : exportQueue.jobFor(player.source)
             if (saved) {
-                window.inPoint = saved.inPoint
-                window.outPoint = saved.outPoint
+                window.loadSegments(saved.segments, saved.active)
             } else if (queued) {
-                window.inPoint = queued.inPoint
-                window.outPoint = queued.outPoint
+                const parts = queued.segments
+                window.loadSegments(parts.length > 1 ? parts : [{ inPoint: queued.inPoint, outPoint: queued.outPoint }],
+                                    parts.length - 1)
             } else {
-                window.inPoint = 0
-                window.outPoint = player.duration
+                window.loadSegments([{ inPoint: 0, outPoint: player.duration }], 0)
             }
             if (saved || queued)
                 player.seek(window.inPoint, true)
@@ -224,6 +279,7 @@ ApplicationWindow {
     Shortcut { sequence: "["; onActivated: player.seek(window.inPoint, true) }
     Shortcut { sequence: "]"; onActivated: player.seek(window.outPoint, true) }
     Shortcut { sequence: "Q"; enabled: window.folderMode; onActivated: window.addToQueue() }
+    Shortcut { sequence: "S"; onActivated: window.addSegment() }
     Shortcut { sequence: "Up"; enabled: window.folderMode; onActivated: window.stepVideo(-1) }
     Shortcut { sequence: "Down"; enabled: window.folderMode; onActivated: window.stepVideo(1) }
     Shortcut { sequence: StandardKey.Open; enabled: !window.busy; onActivated: openDialog.open() }
@@ -285,7 +341,7 @@ ApplicationWindow {
                 tip: "Space  play / pause\n" + appSettings.inKey + " / " + appSettings.outKey + "  set in / out\n"
                      + "← / →  previous / next frame\n"
                      + "Shift + ← / →  jump 5 seconds\n[ / ]  go to in / out\n"
-                     + "Q  add to queue (folder)\n↑ / ↓  previous / next video (folder)\nCtrl + ,  settings"
+                     + "S  add a segment\nQ  add to queue (folder)\n↑ / ↓  previous / next video (folder)\nCtrl + ,  settings"
             }
             IconButton {
                 iconPath: Icons.settings
@@ -434,6 +490,16 @@ ApplicationWindow {
 
                     IconButton { iconPath: Icons.markIn; tip: "Set in point (" + appSettings.inKey + ")"; onClicked: window.setIn() }
                     IconButton { iconPath: Icons.markOut; tip: "Set out point (" + appSettings.outKey + ")"; onClicked: window.setOut() }
+                    IconButton {
+                        text: "+"
+                        font.pixelSize: 18
+                        implicitWidth: 34
+                        enabled: window.segments.length < window.maxSegments
+                        tip: window.segments.length < window.maxSegments
+                             ? "Add a segment (S): keep another part of the video, joined after the others"
+                             : "Up to " + window.maxSegments + " segments"
+                        onClicked: window.addSegment()
+                    }
                     Item { width: 12; height: 1 }
                     IconButton { iconPath: Icons.goToIn; tip: "Go to in point ([)"; onClicked: player.seek(window.inPoint, true) }
                     IconButton { iconPath: Icons.stepBack; tip: "Previous frame (←)"; onClicked: player.frameBackStep() }
@@ -472,8 +538,8 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 duration: player.duration
                 position: player.position
-                inPoint: window.inPoint
-                outPoint: window.outPoint
+                segments: window.segments
+                activeSegment: window.activeSegment
                 fps: player.fps
                 clipName: player.loaded ? window.fileName(player.source) : ""
                 thumbnails: preview.thumbnails
@@ -481,8 +547,13 @@ ApplicationWindow {
                 aspect: player.videoHeight > 0 ? player.videoWidth / player.videoHeight : 16 / 9
                 minimumLength: window.minimumLength
                 onSeekRequested: (time, exact) => player.seek(time, exact)
-                onInPointMoved: (time) => { window.inPoint = time; window.rememberCut() }
-                onOutPointMoved: (time) => { window.outPoint = time; window.rememberCut() }
+                onSegmentSelected: (index) => window.selectSegment(index)
+                onSegmentMoved: (index, inPoint, outPoint) => {
+                    window.selectSegment(index)
+                    window.inPoint = inPoint
+                    window.outPoint = outPoint
+                    window.rememberCut()
+                }
             }
 
             // Action bar
@@ -507,17 +578,113 @@ ApplicationWindow {
                     component Readout: Column {
                         property string label
                         property string value
+                        property color labelColor: Theme.textFaint
                         property color valueColor: Theme.text
                         spacing: 1
-                        Text { text: parent.label; color: Theme.textFaint; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+                        Text { text: parent.label; color: parent.labelColor; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
                         Text { text: parent.value; color: parent.valueColor; font.family: Theme.mono; font.pixelSize: 14 }
                     }
 
-                    Readout { label: "IN"; value: window.timecode(window.inPoint) }
-                    Readout { label: "OUT"; value: window.timecode(window.outPoint) }
-                    Readout { label: "DURATION"; value: window.timecode(window.outPoint - window.inPoint); valueColor: Theme.accent }
+                    Readout {
+                        label: "DURATION"
+                        value: window.timecode(window.keptDuration)
+                        valueColor: Theme.accent
+                        ToolTip.visible: durationHover.hovered && window.segments.length > 1
+                        ToolTip.text: "All segments together"
+                        HoverHandler { id: durationHover }
+                    }
 
-                    Item { Layout.fillWidth: true }
+                    // One in/out pair per segment; with several, each sits in a
+                    // box in its colour, outlined when it is the active one.
+                    Flickable {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        contentWidth: segmentRow.width
+                        contentHeight: height
+                        flickableDirection: Flickable.HorizontalFlick
+                        boundsBehavior: Flickable.StopAtBounds
+                        clip: true
+                        ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded; height: 4 }
+
+                        Row {
+                            id: segmentRow
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 8
+                            Repeater {
+                                model: window.segments
+                                delegate: AbstractButton {
+                                    id: segmentBox
+                                    required property var modelData
+                                    required property int index
+                                    readonly property bool several: window.segments.length > 1
+                                    readonly property bool active: index === window.activeSegment
+                                    readonly property color tint: several ? Theme.segmentColor(index) : Theme.textFaint
+                                    readonly property string suffix: index > 0 ? " " + (index + 1) : ""
+
+                                    implicitWidth: several ? compact.implicitWidth + 24 + removeButton.width
+                                                           : pair.implicitWidth
+                                    implicitHeight: 44
+                                    hoverEnabled: several
+                                    onClicked: window.selectSegment(index)
+
+                                    background: Rectangle {
+                                        visible: segmentBox.several
+                                        radius: Theme.radius + 2
+                                        color: segmentBox.hovered && !segmentBox.active ? Theme.hover : "transparent"
+                                        border.width: segmentBox.active ? 2 : 1
+                                        border.color: segmentBox.active ? segmentBox.tint : Theme.border
+                                    }
+                                    contentItem: Item {
+                                        // Several segments: in and out stacked, to fit more in a row.
+                                        Grid {
+                                            id: compact
+                                            visible: segmentBox.several
+                                            x: 10
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            columns: 2
+                                            columnSpacing: 8
+                                            rowSpacing: 1
+                                            verticalItemAlignment: Grid.AlignVCenter
+                                            Text { text: "IN" + segmentBox.suffix; color: segmentBox.tint; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+                                            Text { text: window.timecode(segmentBox.modelData.inPoint); color: Theme.text; font.family: Theme.mono; font.pixelSize: 13 }
+                                            Text { text: "OUT" + segmentBox.suffix; color: segmentBox.tint; font.pixelSize: 10; font.weight: Font.DemiBold; font.letterSpacing: 0.8 }
+                                            Text { text: window.timecode(segmentBox.modelData.outPoint); color: Theme.text; font.family: Theme.mono; font.pixelSize: 13 }
+                                        }
+                                        Row {
+                                            id: pair
+                                            visible: !segmentBox.several
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 14
+                                            Readout {
+                                                label: "IN" + segmentBox.suffix
+                                                labelColor: segmentBox.tint
+                                                value: window.timecode(segmentBox.modelData.inPoint)
+                                            }
+                                            Readout {
+                                                label: "OUT" + segmentBox.suffix
+                                                labelColor: segmentBox.tint
+                                                value: window.timecode(segmentBox.modelData.outPoint)
+                                            }
+                                        }
+                                        IconButton {
+                                            id: removeButton
+                                            visible: segmentBox.several
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 4
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            iconPath: Icons.close
+                                            iconSize: 12
+                                            implicitWidth: 20
+                                            implicitHeight: 20
+                                            tint: Theme.textDim
+                                            tip: "Remove this segment"
+                                            onClicked: window.removeSegment(segmentBox.index)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Segmented Fast / Accurate switch.
                     Rectangle {
@@ -555,7 +722,7 @@ ApplicationWindow {
                     // Single-video mode: trim right away, with the result shown here.
                     ColumnLayout {
                         visible: !window.folderMode && job.state !== TrimJob.Idle
-                        Layout.maximumWidth: 360
+                        Layout.maximumWidth: 260
                         spacing: 4
                         Text {
                             Layout.fillWidth: true
@@ -566,7 +733,7 @@ ApplicationWindow {
                             text: {
                                 switch (job.state) {
                                 case TrimJob.Running: return "Trimming… " + Math.round(job.progress * 100) + "%"
-                                case TrimJob.Finished: return "Saved " + job.output
+                                case TrimJob.Finished: return "Saved " + job.output.substring(Math.max(job.output.lastIndexOf("/"), job.output.lastIndexOf("\\")) + 1)
                                 case TrimJob.Failed: return "Trim failed: " + job.errorString
                                 case TrimJob.Cancelled: return "Trim cancelled"
                                 }

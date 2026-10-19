@@ -24,6 +24,8 @@ private slots:
     void encoderOptions();
     void customOutputFolder();
     void reportsUnreadableInput();
+    void replacesOriginal();
+    void replaceKeepsOtherFiles();
 
 private:
     double probeDuration(const QString &path);
@@ -224,6 +226,66 @@ void TestTrimJob::reportsUnreadableInput()
     QCOMPARE(job.state(), TrimJob::Failed);
     QVERIFY2(job.errorString().contains("can't read"), qPrintable(job.errorString()));
     QVERIFY(!job.errorDetails().isEmpty());
+}
+
+void TestTrimJob::replacesOriginal()
+{
+    const QString video = m_dir.filePath("replace.mp4");
+    QVERIFY(QFile::copy(m_clip, video));
+
+    TrimJob job;
+    TrimOptions options;
+    options.replaceOriginal = true;
+    options.outputFolder = m_dir.filePath("ignored");
+    job.setOptions(options);
+    job.setSource(QUrl::fromLocalFile(video));
+    job.setInPoint(2.0);
+    job.setOutPoint(6.0);
+    QSignalSpy about(&job, &TrimJob::aboutToReplace);
+    QSignalSpy replaced(&job, &TrimJob::replaceFinished);
+    QVERIFY(runTrim(job));
+    QCOMPARE(job.state(), TrimJob::Finished);
+    QCOMPARE(about.count(), 1);
+    QCOMPARE(replaced.count(), 1);
+    QCOMPARE(replaced.first().at(1).toUrl(), QUrl::fromLocalFile(video));
+    QCOMPARE(replaced.first().at(2).toBool(), job.state() == TrimJob::Finished);
+    QCOMPARE(job.output(), video);
+
+    const double d = probeDuration(video);
+    QVERIFY2(qAbs(d - 4.0) < 0.1, qPrintable(QString::number(d)));
+    QVERIFY(QDir(m_dir.path()).entryList({"*mxcut-part*"}).isEmpty());
+    QVERIFY(!QFileInfo::exists(m_dir.filePath("ignored")));
+}
+
+void TestTrimJob::replaceKeepsOtherFiles()
+{
+    // Accurate mode turns keep.mov into keep.mp4, which is already taken.
+    const QString video = m_dir.filePath("keep.mov");
+    const QString other = m_dir.filePath("keep.mp4");
+    QVERIFY(QFile::copy(m_clip, video));
+    QFile f(other);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("someone else's file");
+    f.close();
+
+    TrimJob job;
+    TrimOptions options;
+    options.replaceOriginal = true;
+    job.setOptions(options);
+    job.setSource(QUrl::fromLocalFile(video));
+    job.setInPoint(1.0);
+    job.setOutPoint(2.0);
+    job.setMode(TrimJob::Accurate);
+    QSignalSpy replaced(&job, &TrimJob::replaceFinished);
+    QVERIFY(runTrim(job));
+    QCOMPARE(job.state(), TrimJob::Failed);
+    QVERIFY2(job.errorString().contains("keep.mp4 already exists"), qPrintable(job.errorString()));
+    QCOMPARE(replaced.first().at(1).toUrl(), QUrl::fromLocalFile(video));
+    QCOMPARE(replaced.first().at(2).toBool(), job.state() == TrimJob::Finished);
+    QVERIFY(QFileInfo::exists(video));
+    QCOMPARE(QFileInfo(other).size(), qint64(19));
+    QCOMPARE(QFileInfo(job.output()).fileName(), QStringLiteral("keep_trim.mp4"));
+    QVERIFY(QFileInfo::exists(job.output()));
 }
 
 QTEST_GUILESS_MAIN(TestTrimJob)

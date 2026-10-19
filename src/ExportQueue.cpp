@@ -104,6 +104,8 @@ void ExportQueue::add(const QUrl &source, double inPoint, double outPoint, int m
         connect(job, &TrimJob::progressChanged, this, [this, job] { onJobChanged(job, {ProgressRole}); });
         connect(job, &TrimJob::outputChanged, this, [this, job] { onJobChanged(job, {OutputRole}); });
         connect(job, &TrimJob::finished, this, &ExportQueue::scheduleNext, Qt::QueuedConnection);
+        connect(job, &TrimJob::aboutToReplace, this, &ExportQueue::aboutToReplace);
+        connect(job, &TrimJob::replaceFinished, this, &ExportQueue::replaceFinished);
     }
 
     job->reset();

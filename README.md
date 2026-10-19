@@ -39,8 +39,10 @@ To release, bump the version in `CMakeLists.txt` and `flake.nix`, then push a ta
 
 Open a video with **Open video…**, drag one onto the window, or pass a path on
 the command line. Set the in and out points by dragging the handles on the
-timeline or with the keyboard, choose a mode and click **Trim**. The result is
-saved next to the original as `<name>_trim.<ext>`.
+timeline by their `<` and `>` tabs on the ruler, or with the keyboard; click or
+drag anywhere else on the timeline to scrub. Choose a mode and click **Trim**.
+The result is saved next to the original as `<name>_trim.<ext>`, or takes the
+original's place when "Replace the original video" is on in Settings.
 
 ### A folder of videos
 
@@ -73,7 +75,12 @@ points you set are kept while you move between videos.
 - **Output**: save next to the original or in one folder, and the file name
   pattern. `{name}`, `{in}`, `{out}`, `{mode}`, `{date}` and `{time}` are filled
   in; existing files get `_2`, `_3`, ... unless overwriting is on. The original
-  is never overwritten.
+  is never overwritten, unless you tick **Replace the original video**: then the
+  trimmed video takes the original's name and place and the original goes to
+  the Trash or Recycle Bin. (Accurate mode may change the file type, so
+  `holiday.mov` becomes `holiday.mp4`; if that name is already taken, the
+  original is kept and the trim is saved as `holiday_trim.mp4`.)
+- **Keyboard shortcuts**: the keys that set the in and out points.
 - **Accurate mode encoding**: the video encoder (x264, x265, SVT-AV1, or NVIDIA,
   Intel, AMD and VA-API GPU encoders), quality, speed, and whether audio is
   re-encoded to AAC or copied. GPU encoders are offered only when a short test

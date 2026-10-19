@@ -77,6 +77,9 @@ signals:
     // A job for this video was added, removed or changed state.
     void sourceChanged(const QUrl &source);
     void allFinished();
+    // Forwarded from the jobs; see TrimJob.
+    void aboutToReplace(const QUrl &source);
+    void replaceFinished(const QUrl &source, const QUrl &current, bool replaced);
 
 private:
     int countIn(TrimJob::State state) const;

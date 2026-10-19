@@ -25,6 +25,30 @@ Rectangle {
     signal inPointMoved(real time)
     signal outPointMoved(real time)
 
+    // Where the user is scrubbing to, or -1. The playhead follows the mouse
+    // until the player has caught up, so it never jumps ahead to a keyframe.
+    property real scrubTime: -1
+    readonly property real shownPosition: scrubTime >= 0 ? scrubTime : position
+
+    function scrubTo(t, exact) {
+        scrubTime = t
+        settleTimer.stop()
+        root.seekRequested(t, exact)
+    }
+    function endScrub(t) {
+        root.seekRequested(t, true)
+        settleTimer.restart()
+    }
+
+    onPositionChanged: if (scrubTime >= 0 && settleTimer.running && Math.abs(position - scrubTime) < 0.05)
+                           settleTimer.triggered()
+
+    Timer {
+        id: settleTimer
+        interval: 800
+        onTriggered: { stop(); root.scrubTime = -1 }
+    }
+
     readonly property int headerWidth: 46
     readonly property int rulerHeight: 28
     readonly property int videoHeight: 66
@@ -226,14 +250,15 @@ Rectangle {
             opacity: 0.6
         }
 
-        // Click or drag anywhere to scrub: quick keyframe seeks while moving,
-        // an exact seek on release.
+        // Click or drag anywhere to scrub. Every seek is frame exact; mpv
+        // drops the ones it can't keep up with, so the picture lands on the
+        // frame under the mouse.
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
-            onPressed: (mouse) => root.seekRequested(root.timeAt(mouse.x), false)
-            onPositionChanged: (mouse) => { if (pressed) root.seekRequested(root.timeAt(mouse.x), false) }
-            onReleased: (mouse) => root.seekRequested(root.timeAt(mouse.x), true)
+            onPressed: (mouse) => root.scrubTo(root.timeAt(mouse.x), true)
+            onPositionChanged: (mouse) => { if (pressed) root.scrubTo(root.timeAt(mouse.x), true) }
+            onReleased: (mouse) => root.endScrub(root.timeAt(mouse.x))
         }
 
         component Handle: Item {
@@ -264,18 +289,21 @@ Rectangle {
                 color: Theme.accent
                 Text {
                     anchors.centerIn: parent
-                    text: handle.isIn ? "I" : "O"
+                    text: handle.isIn ? "<" : ">"
                     color: "white"
                     font.pixelSize: 9
                     font.bold: true
                 }
             }
 
+            // Only the tab on the ruler moves the point, so scrubbing over the
+            // tracks never drags it along.
             MouseArea {
                 id: dragArea
-                anchors.fill: parent
-                anchors.leftMargin: -4
-                anchors.rightMargin: -4
+                y: root.rulerHeight - 18
+                height: 20
+                x: handle.isIn ? handle.width / 2 - 3 : handle.width / 2 - 13
+                width: 16
                 hoverEnabled: true
                 cursorShape: Qt.SizeHorCursor
                 preventStealing: true
@@ -287,14 +315,14 @@ Rectangle {
                     if (handle.isIn) {
                         const v = Math.max(0, Math.min(t, root.outPoint - root.minimumLength))
                         root.inPointMoved(v)
-                        root.seekRequested(v, false)
+                        root.scrubTo(v, true)
                     } else {
                         const v = Math.min(root.duration, Math.max(t, root.inPoint + root.minimumLength))
                         root.outPointMoved(v)
-                        root.seekRequested(v, false)
+                        root.scrubTo(v, true)
                     }
                 }
-                onReleased: root.seekRequested(handle.time, true)
+                onReleased: root.endScrub(handle.time)
             }
         }
 
@@ -304,7 +332,7 @@ Rectangle {
         // Playhead: a tab on the ruler and a line through the tracks.
         Item {
             id: playhead
-            x: root.xFor(root.position)
+            x: root.xFor(root.shownPosition)
             height: audioClip.y + audioClip.height
             visible: root.duration > 0
 

@@ -76,6 +76,28 @@ ApplicationWindow {
             player.source = folderModel.urlAt(next)
     }
 
+    // A trim is about to take the place of this video, so close it if it is
+    // showing; reopenFile shows whatever is there afterwards.
+    property url releasedSource
+    function releaseFile(source) {
+        if (String(player.source) !== String(source))
+            return
+        releasedSource = source
+        player.source = ""
+    }
+    // Videos whose file was replaced by a trim, so their old cut no longer fits.
+    property var replacedFiles: ({})
+    function reopenFile(source, current, replaced) {
+        if (replaced) {
+            delete cuts[String(source)]
+            replacedFiles[String(current)] = true
+        }
+        if (String(releasedSource) !== String(source))
+            return
+        releasedSource = ""
+        player.source = current
+    }
+
     function rememberCut() {
         if (player.loaded && player.duration > 0)
             cuts[String(player.source)] = { inPoint: inPoint, outPoint: outPoint }
@@ -119,8 +141,10 @@ ApplicationWindow {
             if (player.duration <= 0)
                 return
             // Restore this video's cut: what was set here, else what's queued.
-            const saved = window.cuts[String(player.source)]
-            const queued = exportQueue.jobFor(player.source)
+            const fresh = window.replacedFiles[String(player.source)] === true
+            delete window.replacedFiles[String(player.source)]
+            const saved = fresh ? undefined : window.cuts[String(player.source)]
+            const queued = fresh ? null : exportQueue.jobFor(player.source)
             if (saved) {
                 window.inPoint = saved.inPoint
                 window.outPoint = saved.outPoint
@@ -161,12 +185,16 @@ ApplicationWindow {
 
     TrimJob {
         id: job
+        onAboutToReplace: (source) => window.releaseFile(source)
+        onReplaceFinished: (source, current, replaced) => window.reopenFile(source, current, replaced)
     }
 
     ExportQueue {
         id: exportQueue
         settings: appSettings
         maxConcurrent: appSettings.maxConcurrent
+        onAboutToReplace: (source) => window.releaseFile(source)
+        onReplaceFinished: (source, current, replaced) => window.reopenFile(source, current, replaced)
     }
 
     MediaPreview {
@@ -393,7 +421,7 @@ ApplicationWindow {
                     anchors.left: parent.left
                     anchors.leftMargin: 18
                     anchors.verticalCenter: parent.verticalCenter
-                    text: window.timecode(player.position)
+                    text: window.timecode(timeline.shownPosition)
                     color: Theme.accent
                     font.family: Theme.mono
                     font.pixelSize: 18

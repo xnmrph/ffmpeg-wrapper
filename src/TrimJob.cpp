@@ -9,10 +9,15 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QStandardPaths>
+#include <QTimer>
 
 namespace {
 
 constexpr qsizetype kStderrTailBytes = 4096;
+// While replacing, how often and how long to wait for the original to be let
+// go of (Windows can't delete a file another program has open).
+constexpr int kReplaceRetryMs = 250;
+constexpr int kReplaceTries = 16;
 
 QString seconds(double value)
 {
@@ -154,6 +159,14 @@ QString TrimJob::outputPathFor(const QString &input, Mode mode, const TrimOption
                                double inPoint, double outPoint)
 {
     const QFileInfo info(input);
+    if (options.replaceOriginal) {
+        const QString suffix = outputSuffix(input, mode);
+        const QString base = info.completeBaseName() + QStringLiteral(".mxcut-part");
+        QString candidate = info.dir().filePath(base + QLatin1Char('.') + suffix);
+        for (int n = 2; QFileInfo::exists(candidate); ++n)
+            candidate = info.dir().filePath(QStringLiteral("%1%2.%3").arg(base).arg(n).arg(suffix));
+        return candidate;
+    }
     const QString dir = options.outputFolder.isEmpty() ? info.absolutePath() : options.outputFolder;
     const QDateTime now = QDateTime::currentDateTime();
 
@@ -370,6 +383,13 @@ void TrimJob::onProcessFinished(int exitCode, QProcess::ExitStatus status)
 
     if (status == QProcess::NormalExit && exitCode == 0) {
         setProgress(1);
+        if (m_options.replaceOriginal) {
+            m_replaceTries = 0;
+            emit aboutToReplace(m_source);
+            // Give whoever had the original open a moment to close it.
+            QTimer::singleShot(kReplaceRetryMs, this, &TrimJob::replaceOriginal);
+            return;
+        }
         setState(Finished);
     } else {
         const QString output = QString::fromUtf8(m_stderrTail).trimmed();
@@ -415,5 +435,54 @@ void TrimJob::fail(const QString &error)
 {
     setErrorString(error);
     setState(Failed);
+    emit finished();
+}
+
+void TrimJob::replaceOriginal()
+{
+    const QString input = m_source.toLocalFile();
+    const QFileInfo info(input);
+    const QString target = info.dir().filePath(info.completeBaseName() + QLatin1Char('.')
+                                               + QFileInfo(m_output).suffix());
+    // Accurate mode can change the type (holiday.mov -> holiday.mp4); never
+    // put the trim over some other file that already has that name.
+    if (!sameFile(target, input) && QFileInfo::exists(target))
+        return keepTrimmedCopy(tr("%1 already exists, so the original was kept.")
+                                   .arg(QFileInfo(target).fileName()));
+
+    if (QFileInfo::exists(input) && !QFile::moveToTrash(input) && !QFile::remove(input)) {
+        if (++m_replaceTries < kReplaceTries) {
+            QTimer::singleShot(kReplaceRetryMs, this, &TrimJob::replaceOriginal);
+            return;
+        }
+        return keepTrimmedCopy(tr("The original couldn't be removed; another program may have it open."));
+    }
+    if (!QFile::rename(m_output, target)) {
+        setErrorString(tr("The original was moved to the trash, but the trimmed video couldn't be renamed. "
+                          "It was saved as %1.").arg(QFileInfo(m_output).fileName()));
+        setState(Failed);
+        emit replaceFinished(m_source, QUrl::fromLocalFile(m_output), true);
+        emit finished();
+        return;
+    }
+    setOutput(target);
+    setState(Finished);
+    emit replaceFinished(m_source, QUrl::fromLocalFile(target), true);
+    emit finished();
+}
+
+// Replacing failed: keep the original, and give the trim an ordinary name.
+void TrimJob::keepTrimmedCopy(const QString &error)
+{
+    TrimOptions options = m_options;
+    options.replaceOriginal = false;
+    options.outputFolder.clear();
+    const QString copy = outputPathFor(m_source.toLocalFile(), m_mode, options, m_inPoint, m_outPoint);
+    if (QFile::rename(m_output, copy))
+        setOutput(copy);
+    setErrorString(error + QLatin1Char(' ')
+                   + tr("The trimmed video was saved as %1.").arg(QFileInfo(m_output).fileName()));
+    setState(Failed);
+    emit replaceFinished(m_source, m_source, false);
     emit finished();
 }

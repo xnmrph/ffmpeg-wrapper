@@ -58,8 +58,11 @@ jobs:
             || { # Re-run failing tests with QtTest's report in a file, as console output can go missing,
                  # and post each report as one annotation (newlines encoded as %0A).
                  for t in $(sed -n 's/^.*[0-9] - \(tst_[a-z_]*\) .*$/\1/p' test.log); do
-                   code=0; ./build/tests/$t.exe -o report.txt,txt || code=$?
-                   echo "::error::$t exited with $code%0A$(grep -vE '^(PASS|Config|Totals|\*)' report.txt | head -60 | tr -d '\r' | sed ':a;N;$!ba;s/\n/%0A/g')"
+                   exe=$(find build -name "$t.exe" | head -1)
+                   code=0; "$exe" -o report.txt,txt -o -,txt > console.txt 2>&1 || code=$?
+                   { echo "$exe exited with $code"; ldd "$exe" | grep -vi "/c/windows" || true
+                     cat report.txt console.txt 2>/dev/null | grep -vE '^(PASS|Config|Totals)' | head -60; } > diag.txt
+                   echo "::error::$(tr -d '\r' < diag.txt | sed ':a;N;$!ba;s/\n/%0A/g')"
                  done
                  exit 1; }
       - name: Package

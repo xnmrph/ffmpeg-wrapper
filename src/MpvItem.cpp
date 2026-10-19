@@ -14,7 +14,7 @@
 
 namespace {
 
-enum PropertyId : uint64_t { TimePos = 1, Duration, Pause, Fps };
+enum PropertyId : uint64_t { TimePos = 1, Duration, Pause, Fps, DisplayWidth, DisplayHeight };
 
 void *getProcAddress(void *, const char *name)
 {
@@ -115,6 +115,8 @@ MpvItem::MpvItem(QQuickItem *parent)
     mpv_observe_property(handle, Duration, "duration", MPV_FORMAT_DOUBLE);
     mpv_observe_property(handle, Pause, "pause", MPV_FORMAT_FLAG);
     mpv_observe_property(handle, Fps, "container-fps", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(handle, DisplayWidth, "dwidth", MPV_FORMAT_INT64);
+    mpv_observe_property(handle, DisplayHeight, "dheight", MPV_FORMAT_INT64);
 
     mpv_set_wakeup_callback(handle, [](void *ctx) {
         QMetaObject::invokeMethod(static_cast<MpvItem *>(ctx), &MpvItem::processEvents,
@@ -232,6 +234,14 @@ void MpvItem::processEvents()
             case Fps:
                 m_fps = hasValue ? *static_cast<double *>(prop->data) : 0;
                 emit fpsChanged();
+                break;
+            case DisplayWidth:
+                m_videoWidth = hasValue ? int(*static_cast<int64_t *>(prop->data)) : 0;
+                emit videoSizeChanged();
+                break;
+            case DisplayHeight:
+                m_videoHeight = hasValue ? int(*static_cast<int64_t *>(prop->data)) : 0;
+                emit videoSizeChanged();
                 break;
             }
             break;

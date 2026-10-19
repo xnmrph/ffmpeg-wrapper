@@ -188,9 +188,11 @@ QString TrimJob::friendlyError(const QString &out, const QString &encoder)
 
     if (has("Unknown encoder") || has("Encoder not found"))
         return tr("This FFmpeg doesn't include the %1 encoder. Choose another one in Settings.").arg(encoder);
-    if (has("nvenc") || has("nvcuda") || has("CUDA") || has("No capable devices") || has("vaapi")
-        || has("Failed to initialise VAAPI") || has("qsv") || has("MFX") || has("AMF")
-        || has("Device creation failed") || has("hwupload"))
+    // Match encoder names and known hardware errors, not bare words, so a file
+    // path that happens to contain "amf" or "qsv" isn't taken for a GPU error.
+    if (has("_nvenc") || has("_qsv") || has("_amf") || has("_vaapi") || has("nvcuda")
+        || has("CUDA_ERROR") || has("No capable devices") || has("Failed to initialise VAAPI")
+        || has("MFX session") || has("Device creation failed") || has("hwupload"))
         return tr("The GPU encoder couldn't start on this machine. Choose a CPU encoder in Settings.");
     if (has("No space left on device"))
         return tr("The disk is full.");

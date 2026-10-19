@@ -51,7 +51,11 @@ jobs:
             && cmake --build build 2>&1 | tee -a build.log \
             || { grep -iE -A4 "error|fatal" build.log | head -40 | sed 's/^/::error::/'; exit 1; }
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          # Surface failing checks as annotations, since raw logs are not always reachable.
+          set -o pipefail
+          ctest --test-dir build --output-on-failure 2>&1 | tee test.log \
+            || { grep -E "FAIL|Actual|Expected|Loc:|Timeout|Exception|\*\*\*" test.log | head -40 | sed 's/^/::error::/'; exit 1; }
       - name: Package
         run: bash .github/scripts/package-windows.sh build dist/video-trimmer
       - uses: actions/upload-artifact@v4

@@ -1,9 +1,11 @@
 #pragma once
 
+#include "Settings.h"
 #include "TrimJob.h"
 
 #include <QAbstractListModel>
 #include <QList>
+#include <QPointer>
 #include <QUrl>
 #include <QtQml/qqmlregistration.h>
 
@@ -20,6 +22,8 @@ class ExportQueue : public QAbstractListModel
     Q_PROPERTY(int failedCount READ failedCount NOTIFY statsChanged)
     Q_PROPERTY(bool running READ running NOTIFY runningChanged)
     Q_PROPERTY(int maxConcurrent READ maxConcurrent WRITE setMaxConcurrent NOTIFY maxConcurrentChanged)
+    // Output and encoder options are read from here as each job starts.
+    Q_PROPERTY(Settings *settings READ settings WRITE setSettings NOTIFY settingsChanged)
 
 public:
     enum Roles {
@@ -33,6 +37,7 @@ public:
         ProgressRole,
         OutputRole,
         ErrorRole,
+        ErrorDetailsRole,
     };
 
     explicit ExportQueue(QObject *parent = nullptr);
@@ -49,6 +54,8 @@ public:
     bool running() const { return m_running; }
     int maxConcurrent() const { return m_maxConcurrent; }
     void setMaxConcurrent(int value);
+    Settings *settings() const { return m_settings; }
+    void setSettings(Settings *settings);
 
     // Queues a trim. A video that is already waiting in the queue (or failed,
     // or was cancelled) gets its cut updated instead of a second entry.
@@ -66,6 +73,7 @@ signals:
     void statsChanged();
     void runningChanged();
     void maxConcurrentChanged();
+    void settingsChanged();
     // A job for this video was added, removed or changed state.
     void sourceChanged(const QUrl &source);
     void allFinished();
@@ -80,4 +88,5 @@ private:
     QList<TrimJob *> m_jobs;
     bool m_running = false;
     int m_maxConcurrent = 2;
+    QPointer<Settings> m_settings;
 };

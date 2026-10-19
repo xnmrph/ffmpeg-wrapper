@@ -1,7 +1,10 @@
 #include "ExportQueue.h"
 #include "testclip.h"
 
+#include <QDir>
 #include <QFileInfo>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -19,6 +22,7 @@ private slots:
     void failedJobDoesNotStopTheRest();
     void cancelStopsTheQueue();
     void removeAndClearFinished();
+    void usesSettingsWhenJobsStart();
 
 private:
     QUrl clip(int n) const { return QUrl::fromLocalFile(m_clips.at(n)); }
@@ -175,6 +179,28 @@ void TestExportQueue::removeAndClearFinished()
     QCOMPARE(queue.count(), 0);
     QVERIFY(QFileInfo::exists(out));
     QFile::remove(out);
+}
+
+void TestExportQueue::usesSettingsWhenJobsStart()
+{
+    QStandardPaths::setTestModeEnabled(true);
+    QSettings().clear();
+    Settings settings;
+    ExportQueue queue;
+    queue.setSettings(&settings);
+    queue.add(clip(0), 1.0, 2.0, TrimJob::Fast);
+
+    // Changed after queuing but before starting: the new choice wins.
+    settings.setOutputFolder(QUrl::fromLocalFile(m_dir.filePath("exports")));
+    settings.setSaveBesideSource(false);
+    settings.setFilenamePattern("{name}-cut");
+    queue.start();
+    QVERIFY(waitForAll(queue));
+
+    const QString out = queue.data(queue.index(0), ExportQueue::OutputRole).toString();
+    QCOMPARE(out, QDir(m_dir.filePath("exports")).filePath("clip0-cut.mp4"));
+    QVERIFY(QFileInfo::exists(out));
+    QSettings().clear();
 }
 
 QTEST_GUILESS_MAIN(TestExportQueue)

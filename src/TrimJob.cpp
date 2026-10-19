@@ -1,6 +1,10 @@
 #include "TrimJob.h"
 
+#include "Encoders.h"
+#include "Settings.h"
+
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -20,9 +24,50 @@ QString outputSuffix(const QString &input, TrimJob::Mode mode)
     const QString suffix = QFileInfo(input).suffix().toLower();
     if (mode == TrimJob::Fast)
         return suffix.isEmpty() ? QStringLiteral("mkv") : suffix;
-    // Re-encoding uses H.264 and AAC, which fit in MKV or MP4 but not in
-    // containers such as WebM or AVI.
+    // Re-encoded H.264/HEVC/AV1 fits in MKV or MP4 but not in containers such
+    // as WebM or AVI.
     return suffix == QLatin1String("mkv") ? suffix : QStringLiteral("mp4");
+}
+
+// 83.5 s -> "00-01-23.500", safe in a filename on every platform.
+QString fileTime(double t)
+{
+    const qint64 ms = qRound64(qMax(0.0, t) * 1000);
+    return QStringLiteral("%1-%2-%3.%4")
+        .arg(ms / 3600000, 2, 10, QLatin1Char('0'))
+        .arg(ms / 60000 % 60, 2, 10, QLatin1Char('0'))
+        .arg(ms / 1000 % 60, 2, 10, QLatin1Char('0'))
+        .arg(ms % 1000, 3, 10, QLatin1Char('0'));
+}
+
+QString sanitizeFileName(QString name)
+{
+    static const QString invalid = QStringLiteral("<>:\"/\\|?*");
+    for (QChar &c : name) {
+        if (invalid.contains(c) || c.unicode() < 32)
+            c = QLatin1Char('_');
+    }
+    name = name.trimmed();
+    while (name.endsWith(QLatin1Char('.')))
+        name.chop(1);
+    return name;
+}
+
+QString ffmpegOverride;
+
+// QFileInfo's operator== treats any two missing files as equal, so compare
+// paths unless both files exist.
+bool sameFile(const QString &a, const QString &b)
+{
+    const QFileInfo fa(a), fb(b);
+    if (fa.exists() && fb.exists())
+        return fa.canonicalFilePath() == fb.canonicalFilePath();
+#ifdef Q_OS_WIN
+    constexpr Qt::CaseSensitivity cs = Qt::CaseInsensitive;
+#else
+    constexpr Qt::CaseSensitivity cs = Qt::CaseSensitive;
+#endif
+    return QDir::cleanPath(fa.absoluteFilePath()).compare(QDir::cleanPath(fb.absoluteFilePath()), cs) == 0;
 }
 
 } // namespace
@@ -81,8 +126,23 @@ void TrimJob::setMode(Mode mode)
     emit modeChanged();
 }
 
+void TrimJob::setFfmpegOverride(const QString &path)
+{
+    ffmpegOverride = path;
+}
+
+void TrimJob::applySettings(Settings *settings)
+{
+    if (settings)
+        m_options = settings->trimOptions();
+}
+
 QString TrimJob::ffmpegPath()
 {
+    if (!ffmpegOverride.isEmpty()) {
+        const QFileInfo info(ffmpegOverride);
+        return info.isFile() && info.isExecutable() ? info.absoluteFilePath() : QString();
+    }
     const QString exe = QStringLiteral("ffmpeg");
     const QString bundled = QStandardPaths::findExecutable(exe, {QCoreApplication::applicationDirPath()});
     if (!bundled.isEmpty())
@@ -90,17 +150,67 @@ QString TrimJob::ffmpegPath()
     return QStandardPaths::findExecutable(exe);
 }
 
-QString TrimJob::defaultOutputPath(const QString &input, Mode mode)
+QString TrimJob::outputPathFor(const QString &input, Mode mode, const TrimOptions &options,
+                               double inPoint, double outPoint)
 {
     const QFileInfo info(input);
-    const QString dir = info.absolutePath();
-    const QString base = info.completeBaseName() + QStringLiteral("_trim");
-    const QString suffix = outputSuffix(input, mode);
+    const QString dir = options.outputFolder.isEmpty() ? info.absolutePath() : options.outputFolder;
+    const QDateTime now = QDateTime::currentDateTime();
 
+    QString pattern = options.filenamePattern.trimmed();
+    if (pattern.isEmpty())
+        pattern = QStringLiteral("{name}_trim");
+    QString base = pattern;
+    base.replace(QLatin1String("{name}"), info.completeBaseName())
+        .replace(QLatin1String("{in}"), fileTime(inPoint))
+        .replace(QLatin1String("{out}"), fileTime(outPoint))
+        .replace(QLatin1String("{mode}"), mode == Fast ? QStringLiteral("fast") : QStringLiteral("accurate"))
+        .replace(QLatin1String("{date}"), now.toString(QStringLiteral("yyyy-MM-dd")))
+        .replace(QLatin1String("{time}"), now.toString(QStringLiteral("HH-mm-ss")));
+    base = sanitizeFileName(base);
+    if (base.isEmpty())
+        base = info.completeBaseName() + QStringLiteral("_trim");
+
+    const QString suffix = outputSuffix(input, mode);
     QString candidate = QDir(dir).filePath(base + QLatin1Char('.') + suffix);
-    for (int n = 2; QFileInfo::exists(candidate); ++n)
+    // Never write over the source, even when overwriting is allowed.
+    const auto taken = [&](const QString &path) {
+        return sameFile(path, input) || (!options.overwrite && QFileInfo::exists(path));
+    };
+    for (int n = 2; taken(candidate); ++n)
         candidate = QDir(dir).filePath(QStringLiteral("%1_%2.%3").arg(base).arg(n).arg(suffix));
     return candidate;
+}
+
+QString TrimJob::friendlyError(const QString &out, const QString &encoder)
+{
+    const auto has = [&out](const char *text) { return out.contains(QLatin1String(text), Qt::CaseInsensitive); };
+
+    if (has("Unknown encoder") || has("Encoder not found"))
+        return tr("This FFmpeg doesn't include the %1 encoder. Choose another one in Settings.").arg(encoder);
+    if (has("nvenc") || has("nvcuda") || has("CUDA") || has("No capable devices") || has("vaapi")
+        || has("Failed to initialise VAAPI") || has("qsv") || has("MFX") || has("AMF")
+        || has("Device creation failed") || has("hwupload"))
+        return tr("The GPU encoder couldn't start on this machine. Choose a CPU encoder in Settings.");
+    if (has("No space left on device"))
+        return tr("The disk is full.");
+    if (has("Permission denied"))
+        return tr("Permission denied while reading the video or writing the trimmed file.");
+    if (has("Invalid data found when processing input") || has("moov atom not found")
+        || has("could not find codec parameters"))
+        return tr("FFmpeg can't read this file. It may be damaged or not a video.");
+    if (has("No such file or directory"))
+        return tr("The video or the output folder no longer exists.");
+    if (has("Could not find tag for codec") || has("not currently supported in container")
+        || has("codec not currently supported"))
+        return tr("This video's streams can't be stored in the output file type. Try Accurate mode, "
+                  "or turn off copying audio in Settings.");
+    if (has("Error while opening encoder") || has("Error initializing output stream"))
+        return tr("The %1 encoder couldn't start with these settings. Try another encoder in Settings.")
+            .arg(encoder);
+
+    const QStringList lines = out.trimmed().split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    return lines.isEmpty() ? QString() : lines.last().trimmed();
 }
 
 QStringList TrimJob::arguments() const
@@ -114,6 +224,10 @@ QStringList TrimJob::arguments() const
     QStringList args{
         QStringLiteral("-hide_banner"), QStringLiteral("-nostdin"), QStringLiteral("-y"),
         QStringLiteral("-nostats"), QStringLiteral("-progress"), QStringLiteral("pipe:1"),
+    };
+    if (m_mode == Accurate)
+        args << Encoders::inputArgs(m_options.videoEncoder);
+    args << QStringList{
         // Seeking before -i is fast, and frame-exact when re-encoding.
         QStringLiteral("-ss"), seconds(m_inPoint),
         QStringLiteral("-i"), input,
@@ -129,11 +243,12 @@ QStringList TrimJob::arguments() const
              << QStringLiteral("-c") << QStringLiteral("copy")
              << QStringLiteral("-avoid_negative_ts") << QStringLiteral("make_zero");
     } else {
-        args << QStringLiteral("-c:v") << QStringLiteral("libx264")
-             << QStringLiteral("-preset") << QStringLiteral("veryfast")
-             << QStringLiteral("-crf") << QStringLiteral("18")
-             << QStringLiteral("-c:a") << QStringLiteral("aac")
-             << QStringLiteral("-b:a") << QStringLiteral("192k");
+        args << Encoders::videoArgs(m_options.videoEncoder, m_options.quality, m_options.speed, mp4Like);
+        if (m_options.copyAudio)
+            args << QStringLiteral("-c:a") << QStringLiteral("copy");
+        else
+            args << QStringLiteral("-c:a") << QStringLiteral("aac")
+                 << QStringLiteral("-b:a") << QStringLiteral("%1k").arg(m_options.audioBitrate);
         // MKV takes any subtitle format as-is; MP4 cannot hold most of them.
         if (mkv)
             args << QStringLiteral("-map") << QStringLiteral("0:s?") << QStringLiteral("-c:s") << QStringLiteral("copy");
@@ -159,27 +274,28 @@ void TrimJob::start()
     m_stderrTail.clear();
 
     const QString input = m_source.toLocalFile();
-    if (input.isEmpty() || !QFileInfo::exists(input)) {
-        setErrorString(tr("The input file could not be found."));
-        setState(Failed);
-        emit finished();
-        return;
-    }
-    if (m_outPoint - m_inPoint <= 0) {
-        setErrorString(tr("The out point must be after the in point."));
-        setState(Failed);
-        emit finished();
-        return;
-    }
+    const QFileInfo inputInfo(input);
+    if (input.isEmpty() || !inputInfo.exists())
+        return fail(tr("The video could not be found."));
+    if (!inputInfo.isReadable())
+        return fail(tr("The video can't be read. Check its permissions."));
+    if (m_outPoint - m_inPoint <= 0)
+        return fail(tr("The out point must be after the in point."));
     const QString ffmpeg = ffmpegPath();
-    if (ffmpeg.isEmpty()) {
-        setErrorString(tr("FFmpeg was not found. Install it or place it next to the app."));
-        setState(Failed);
-        emit finished();
-        return;
-    }
+    if (ffmpeg.isEmpty())
+        return fail(tr("FFmpeg was not found. Install it, or set its location in Settings."));
+    if (m_mode == Accurate && !Encoders::find(m_options.videoEncoder))
+        return fail(tr("Unknown encoder \"%1\". Choose another one in Settings.").arg(m_options.videoEncoder));
+
     if (m_output.isEmpty())
-        setOutput(defaultOutputPath(input, m_mode));
+        setOutput(outputPathFor(input, m_mode, m_options, m_inPoint, m_outPoint));
+    const QFileInfo outputInfo(m_output);
+    if (sameFile(m_output, input))
+        return fail(tr("The trimmed file would replace the original. Change the filename pattern in Settings."));
+    if (!QDir().mkpath(outputInfo.absolutePath()))
+        return fail(tr("The output folder %1 can't be created.").arg(QDir::toNativeSeparators(outputInfo.absolutePath())));
+    if (!QFileInfo(outputInfo.absolutePath()).isWritable())
+        return fail(tr("Can't write to the output folder %1.").arg(QDir::toNativeSeparators(outputInfo.absolutePath())));
 
     m_process = new QProcess(this);
     connect(m_process, &QProcess::readyReadStandardOutput, this, &TrimJob::readProgress);
@@ -254,12 +370,14 @@ void TrimJob::onProcessFinished(int exitCode, QProcess::ExitStatus status)
         setProgress(1);
         setState(Finished);
     } else {
-        QString detail = QString::fromUtf8(m_stderrTail).trimmed();
-        const QStringList lines = detail.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-        detail = lines.mid(qMax(0, lines.size() - 3)).join(QLatin1Char('\n'));
-        if (exitCode == -1 && detail.isEmpty())
-            detail = tr("FFmpeg could not be started.");
-        setErrorString(detail.isEmpty() ? tr("FFmpeg exited with code %1.").arg(exitCode) : detail);
+        const QString output = QString::fromUtf8(m_stderrTail).trimmed();
+        const QStringList lines = output.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        const QString details = lines.mid(qMax(0, lines.size() - 6)).join(QLatin1Char('\n'));
+        QString error = friendlyError(output, m_mode == Accurate ? m_options.videoEncoder : QString());
+        if (error.isEmpty())
+            error = exitCode == -1 ? tr("FFmpeg could not be started.")
+                                   : tr("FFmpeg stopped with an error (code %1).").arg(exitCode);
+        setErrorString(error, details);
         QFile::remove(m_output);
         setState(Failed);
     }
@@ -282,10 +400,18 @@ void TrimJob::setProgress(double progress)
     emit progressChanged();
 }
 
-void TrimJob::setErrorString(const QString &error)
+void TrimJob::setErrorString(const QString &error, const QString &details)
 {
-    if (error == m_errorString)
+    if (error == m_errorString && details == m_errorDetails)
         return;
     m_errorString = error;
+    m_errorDetails = details;
     emit errorStringChanged();
+}
+
+void TrimJob::fail(const QString &error)
+{
+    setErrorString(error);
+    setState(Failed);
+    emit finished();
 }

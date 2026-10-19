@@ -5,13 +5,17 @@ add_library(trimmer_core STATIC
     ../src/TrimJob.h ../src/TrimJob.cpp
     ../src/ExportQueue.h ../src/ExportQueue.cpp
     ../src/VideoFolderModel.h ../src/VideoFolderModel.cpp
+    ../src/Settings.h ../src/Settings.cpp
+    ../src/Encoders.h ../src/Encoders.cpp
+    ../src/EncoderProbe.h ../src/EncoderProbe.cpp
 )
 set_target_properties(trimmer_core PROPERTIES AUTOMOC ON)
 target_include_directories(trimmer_core PUBLIC ../src)
 target_link_libraries(trimmer_core PUBLIC Qt6::Core Qt6::Qml)
 
-foreach(test tst_trimjob tst_exportqueue tst_videofoldermodel)
+foreach(test tst_trimjob tst_exportqueue tst_videofoldermodel tst_settings tst_encoderprobe)
     qt_add_executable(${test} ${test}.cpp testclip.h)
     target_link_libraries(${test} PRIVATE trimmer_core Qt6::Test)
     add_test(NAME ${test} COMMAND ${test})
+    set_tests_properties(${test} PROPERTIES TIMEOUT 300)
 endforeach()

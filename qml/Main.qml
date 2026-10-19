@@ -156,12 +156,30 @@ ApplicationWindow {
         onAccepted: window.openFolder(selectedFolder)
     }
 
+    Settings {
+        id: appSettings
+        onFfmpegPathChanged: encoderProbe.probe()
+    }
+
+    EncoderProbe {
+        id: encoderProbe
+        Component.onCompleted: encoderProbe.probe()
+    }
+
     TrimJob {
         id: job
     }
 
     ExportQueue {
         id: exportQueue
+        settings: appSettings
+        maxConcurrent: appSettings.maxConcurrent
+    }
+
+    SettingsDialog {
+        id: settingsDialog
+        settings: appSettings
+        probe: encoderProbe
     }
 
     VideoFolderModel {
@@ -183,6 +201,8 @@ ApplicationWindow {
     Shortcut { sequence: "Down"; enabled: window.folderMode; onActivated: window.stepVideo(1) }
     Shortcut { sequence: StandardKey.Open; enabled: !window.busy; onActivated: openDialog.open() }
     Shortcut { sequence: "Ctrl+Shift+O"; enabled: !window.busy; onActivated: folderDialog.open() }
+    Shortcut { sequence: StandardKey.Preferences; onActivated: settingsDialog.open() }
+    Shortcut { sequence: "Ctrl+,"; onActivated: settingsDialog.open() }
 
     header: ToolBar {
         RowLayout {
@@ -213,11 +233,44 @@ ApplicationWindow {
                 opacity: 0.5
                 font.pixelSize: 11
             }
+            Button {
+                text: "Settings…"
+                onClicked: settingsDialog.open()
+            }
+        }
+    }
+
+    // FFmpeg is needed for every trim, so say so up front when it's missing.
+    Rectangle {
+        id: ffmpegBanner
+        z: 10
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: visible ? 40 : 0
+        visible: !encoderProbe.probing && !encoderProbe.ffmpegFound
+        color: "#5c2b2b"
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            Label {
+                Layout.fillWidth: true
+                text: appSettings.ffmpegPath !== ""
+                      ? "The FFmpeg program chosen in Settings doesn't work. Trimming won't work until it's fixed."
+                      : "FFmpeg wasn't found, so trimming won't work. Install FFmpeg, or choose where it is in Settings."
+                elide: Text.ElideRight
+            }
+            Button {
+                text: "Settings…"
+                onClicked: settingsDialog.open()
+            }
         }
     }
 
     RowLayout {
         anchors.fill: parent
+        anchors.topMargin: ffmpegBanner.height
         spacing: 0
 
         FileSidebar {
@@ -342,7 +395,7 @@ ApplicationWindow {
                     ToolTip.delay: 600
                     ToolTip.text: currentValue === TrimJob.Fast
                                   ? "Copies the streams without re-encoding. Very quick and lossless, but the start snaps to the nearest earlier keyframe."
-                                  : "Re-encodes to H.264/AAC so the cut lands on the exact frame. Slower."
+                                  : "Re-encodes so the cut lands on the exact frame. Slower. The encoder and quality are set in Settings."
                 }
 
                 // Single-video mode: trim right away, with the result shown here.
@@ -355,6 +408,9 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     visible: !window.folderMode
                     elide: Text.ElideMiddle
+                    ToolTip.visible: job.state === TrimJob.Failed && errorHover.hovered && job.errorDetails !== ""
+                    ToolTip.text: job.errorDetails
+                    HoverHandler { id: errorHover }
                     color: job.state === TrimJob.Failed ? "#ff6b6b" : palette.windowText
                     text: {
                         switch (job.state) {
@@ -387,6 +443,7 @@ ApplicationWindow {
                         job.outPoint = window.outPoint
                         job.mode = modeBox.currentValue
                         job.output = ""
+                        job.applySettings(appSettings)
                         job.start()
                     }
                 }

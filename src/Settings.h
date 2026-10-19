@@ -1,0 +1,70 @@
+#pragma once
+
+#include "TrimJob.h"
+
+#include <QObject>
+#include <QSettings>
+#include <QUrl>
+#include <QtQml/qqmlregistration.h>
+
+// The user's choices, saved between runs.
+class Settings : public QObject
+{
+    Q_OBJECT
+    QML_ELEMENT
+
+    Q_PROPERTY(bool saveBesideSource READ saveBesideSource WRITE setSaveBesideSource NOTIFY changed)
+    Q_PROPERTY(QUrl outputFolder READ outputFolder WRITE setOutputFolder NOTIFY changed)
+    Q_PROPERTY(QString filenamePattern READ filenamePattern WRITE setFilenamePattern NOTIFY changed)
+    Q_PROPERTY(bool overwrite READ overwrite WRITE setOverwrite NOTIFY changed)
+    Q_PROPERTY(QString videoEncoder READ videoEncoder WRITE setVideoEncoder NOTIFY changed)
+    Q_PROPERTY(int quality READ quality WRITE setQuality NOTIFY changed)
+    Q_PROPERTY(int speed READ speed WRITE setSpeed NOTIFY changed)
+    Q_PROPERTY(bool copyAudio READ copyAudio WRITE setCopyAudio NOTIFY changed)
+    Q_PROPERTY(int audioBitrate READ audioBitrate WRITE setAudioBitrate NOTIFY changed)
+    Q_PROPERTY(int maxConcurrent READ maxConcurrent WRITE setMaxConcurrent NOTIFY changed)
+    Q_PROPERTY(QString ffmpegPath READ ffmpegPath WRITE setFfmpegPath NOTIFY ffmpegPathChanged)
+
+public:
+    explicit Settings(QObject *parent = nullptr);
+
+    bool saveBesideSource() const;
+    void setSaveBesideSource(bool value);
+    QUrl outputFolder() const;
+    void setOutputFolder(const QUrl &value);
+    QString filenamePattern() const;
+    void setFilenamePattern(const QString &value);
+    bool overwrite() const;
+    void setOverwrite(bool value);
+    QString videoEncoder() const;
+    void setVideoEncoder(const QString &value);
+    int quality() const;
+    void setQuality(int value);
+    int speed() const;
+    void setSpeed(int value);
+    bool copyAudio() const;
+    void setCopyAudio(bool value);
+    int audioBitrate() const;
+    void setAudioBitrate(int value);
+    int maxConcurrent() const;
+    void setMaxConcurrent(int value);
+    // Empty means find FFmpeg automatically.
+    QString ffmpegPath() const;
+    void setFfmpegPath(const QString &value);
+
+    TrimOptions trimOptions() const;
+
+    // The file name the current pattern gives, for the Settings preview.
+    Q_INVOKABLE QString previewFileName(const QString &videoName, int mode) const;
+    Q_INVOKABLE void resetEncoding();
+
+signals:
+    void changed();
+    void ffmpegPathChanged();
+
+private:
+    QVariant value(const char *key, const QVariant &fallback) const;
+    void store(const char *key, const QVariant &value);
+
+    QSettings m_store;
+};

@@ -48,6 +48,8 @@ QVariant ExportQueue::data(const QModelIndex &index, int role) const
         return job->output();
     case ErrorRole:
         return job->errorString();
+    case ErrorDetailsRole:
+        return job->errorDetails();
     }
     return {};
 }
@@ -65,6 +67,7 @@ QHash<int, QByteArray> ExportQueue::roleNames() const
         {ProgressRole, "progress"},
         {OutputRole, "output"},
         {ErrorRole, "errorString"},
+        {ErrorDetailsRole, "errorDetails"},
     };
 }
 
@@ -79,6 +82,14 @@ void ExportQueue::setMaxConcurrent(int value)
         scheduleNext();
 }
 
+void ExportQueue::setSettings(Settings *settings)
+{
+    if (settings == m_settings)
+        return;
+    m_settings = settings;
+    emit settingsChanged();
+}
+
 void ExportQueue::add(const QUrl &source, double inPoint, double outPoint, int mode)
 {
     TrimJob *job = jobFor(source);
@@ -88,7 +99,7 @@ void ExportQueue::add(const QUrl &source, double inPoint, double outPoint, int m
         job = new TrimJob(this);
         job->setSource(source);
         connect(job, &TrimJob::stateChanged, this, [this, job] {
-            onJobChanged(job, {StateRole, OutputRole, ErrorRole});
+            onJobChanged(job, {StateRole, OutputRole, ErrorRole, ErrorDetailsRole});
         });
         connect(job, &TrimJob::progressChanged, this, [this, job] { onJobChanged(job, {ProgressRole}); });
         connect(job, &TrimJob::outputChanged, this, [this, job] { onJobChanged(job, {OutputRole}); });
@@ -101,7 +112,7 @@ void ExportQueue::add(const QUrl &source, double inPoint, double outPoint, int m
     job->setMode(TrimJob::Mode(mode));
 
     if (reuse) {
-        onJobChanged(job, {InPointRole, OutPointRole, ModeRole, StateRole, ProgressRole, OutputRole, ErrorRole});
+        onJobChanged(job, {InPointRole, OutPointRole, ModeRole, StateRole, ProgressRole, OutputRole, ErrorRole, ErrorDetailsRole});
     } else {
         beginInsertRows({}, int(m_jobs.size()), int(m_jobs.size()));
         m_jobs.append(job);
@@ -207,6 +218,7 @@ void ExportQueue::scheduleNext()
         if (active >= m_maxConcurrent)
             break;
         if (job->state() == TrimJob::Idle) {
+            job->applySettings(m_settings);
             job->start();
             if (job->state() == TrimJob::Running)
                 ++active;

@@ -51,7 +51,20 @@ jobs:
             && cmake --build build 2>&1 | tee -a build.log \
             || { grep -iE -A4 "error|fatal" build.log | head -40 | sed 's/^/::error::/'; exit 1; }
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          # Surface failing checks as annotations, since raw logs are not always reachable.
+          set -o pipefail
+          ctest --test-dir build --output-on-failure 2>&1 | tee test.log \
+            || { # Re-run failing tests with QtTest's report in a file, as console output can go missing,
+                 # and post each report as one annotation (newlines encoded as %0A).
+                 for t in $(sed -n 's/^.*[0-9] - \(tst_[a-z_]*\) .*$/\1/p' test.log); do
+                   exe=$(find build -name "$t.exe" | head -1)
+                   code=0; "$exe" -o report.txt,txt -o -,txt > console.txt 2>&1 || code=$?
+                   { echo "$exe exited with $code"; ldd "$exe" | grep -vi "/c/windows" || true
+                     cat report.txt console.txt 2>/dev/null | grep -vE '^(PASS|Config|Totals)' | head -60; } > diag.txt
+                   echo "::error::$(tr -d '\r' < diag.txt | sed ':a;N;$!ba;s/\n/%0A/g')"
+                 done
+                 exit 1; }
       - name: Package
         run: bash .github/scripts/package-windows.sh build dist/video-trimmer
       - uses: actions/upload-artifact@v4

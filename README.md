@@ -10,7 +10,7 @@ FFmpeg can read and steps through it frame by frame.
 | --- | --- | --- |
 | 1 | Single-video mode: preview, in/out scrubber, Fast and Accurate trims | Done |
 | 2 | Folder mode with a sidebar and an export queue | Done |
-| 3 | Output settings (folder, filename pattern, encoder options) | Planned |
+| 3 | Output settings (folder, filename pattern, encoder options) | Done |
 | 4 | Packaging: Windows installer, Nix package, AppImage | Planned |
 
 ## Using it
@@ -44,6 +44,26 @@ points you set are kept while you move between videos.
 | ↑ / ↓ | Previous / next video (folder mode) |
 | Ctrl + O | Open a video |
 | Ctrl + Shift + O | Open a folder |
+| Ctrl + , | Settings |
+
+### Settings
+
+**Settings…** (top right) is saved between runs:
+
+- **Output**: save next to the original or in one folder, and the file name
+  pattern. `{name}`, `{in}`, `{out}`, `{mode}`, `{date}` and `{time}` are filled
+  in; existing files get `_2`, `_3`, ... unless overwriting is on. The original
+  is never overwritten.
+- **Accurate mode encoding**: the video encoder (x264, x265, SVT-AV1, or NVIDIA,
+  Intel, AMD and VA-API GPU encoders), quality, speed, and whether audio is
+  re-encoded to AAC or copied. GPU encoders are offered only when a short test
+  encode works on your machine.
+- **FFmpeg**: find it automatically, or point at a specific `ffmpeg` program. A
+  banner warns when no working FFmpeg is found.
+
+When a trim fails, the message says what went wrong in plain words (unreadable
+file, full disk, GPU encoder not working, ...); hover it to see FFmpeg's own
+output.
 
 **Fast** copies the streams without re-encoding. It is lossless and finishes
 in seconds, but the cut starts at the keyframe at or before the in point.
@@ -51,7 +71,8 @@ in seconds, but the cut starts at the keyframe at or before the in point.
 **Accurate** re-encodes to H.264 and AAC so the cut lands on the exact frame.
 It is slower. MKV inputs stay MKV; everything else becomes MP4.
 
-FFmpeg is looked up next to the app first, then on `PATH`.
+FFmpeg is looked up in this order: the program chosen in Settings, next to the
+app, then on `PATH`.
 
 ## Building
 
@@ -89,8 +110,11 @@ cmake --build build
 - `src/TrimJob.*` runs one FFmpeg trim and reports its progress.
 - `src/ExportQueue.*` is folder mode's queue of TrimJobs, run a few at a time.
 - `src/VideoFolderModel.*` lists the videos in a folder, in natural order, with their queue state.
+- `src/Settings.*` holds the saved choices; `src/Encoders.*` maps each encoder to FFmpeg arguments, and
+  `src/EncoderProbe.*` finds FFmpeg and tests which encoders work.
 - `qml/Main.qml` is the window, `qml/Scrubber.qml` the timeline with the in/out handles, and
-  `qml/FileSidebar.qml` and `qml/QueuePanel.qml` the folder-mode side panels.
-- `tests/` holds tests for those three classes, which generate clips and check real FFmpeg output.
+  `qml/FileSidebar.qml` and `qml/QueuePanel.qml` the folder-mode side panels, and
+  `qml/SettingsDialog.qml` the Settings window.
+- `tests/` holds tests for the C++ classes, which generate clips and check real FFmpeg output.
 
 Set `VIDEO_TRIMMER_MPV_LOG=v` to print mpv's log when debugging playback.

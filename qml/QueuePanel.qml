@@ -45,6 +45,7 @@ Rectangle {
                 required property int jobState
                 required property real progress
                 required property string errorString
+                required property string errorDetails
 
                 width: ListView.view.width
                 onClicked: root.jobActivated(source)
@@ -84,7 +85,7 @@ Rectangle {
                     Label {
                         Layout.fillWidth: true
                         visible: row.jobState !== TrimJob.Running && row.jobState !== TrimJob.Idle
-                        elide: Text.ElideRight
+                        wrapMode: Text.WordWrap
                         font.pixelSize: 11
                         text: row.jobState === TrimJob.Finished ? "Done"
                             : row.jobState === TrimJob.Failed ? "Failed: " + row.errorString
@@ -92,7 +93,7 @@ Rectangle {
                         color: row.jobState === TrimJob.Finished ? "#3fb950"
                              : row.jobState === TrimJob.Failed ? "#ff6b6b" : "#8a8a8a"
                         ToolTip.visible: row.jobState === TrimJob.Failed && failHover.hovered
-                        ToolTip.text: row.errorString
+                        ToolTip.text: row.errorString + (row.errorDetails ? "\n\n" + row.errorDetails : "")
                         HoverHandler { id: failHover }
                     }
                 }
@@ -131,7 +132,7 @@ Rectangle {
                 from: 1
                 to: 8
                 value: root.queue.maxConcurrent
-                onValueModified: root.queue.maxConcurrent = value
+                onValueModified: root.queue.settings.maxConcurrent = value
                 ToolTip.visible: hovered
                 ToolTip.delay: 600
                 ToolTip.text: "How many videos are trimmed at the same time"

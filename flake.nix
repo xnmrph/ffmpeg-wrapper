@@ -7,6 +7,12 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }:
+    {
+      # For NixOS or home-manager: add this overlay, then pkgs.video-trimmer.
+      overlays.default = final: prev: {
+        video-trimmer = self.packages.${prev.stdenv.hostPlatform.system}.default;
+      };
+    } //
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -14,6 +20,7 @@
       {
         packages.default = pkgs.stdenv.mkDerivation {
           pname = "video-trimmer";
+          # Keep in step with project(VERSION) in CMakeLists.txt; CI checks this.
           version = "0.1.0";
           src = ./.;
 
@@ -28,6 +35,7 @@
           meta = {
             description = "Trim videos singly or in batches with FFmpeg";
             mainProgram = "video-trimmer";
+            homepage = "https://github.com/xnmrph/ffmpeg-wrapper";
             platforms = pkgs.lib.platforms.linux;
           };
         };

@@ -67,6 +67,20 @@ target_link_libraries(video-trimmer PRIVATE
 
 target_include_directories(video-trimmer PRIVATE src)
 
+# Window icon, built into the program.
+qt_add_resources(video-trimmer app_icon
+    PREFIX /
+    FILES packaging/icons/video-trimmer-256.png
+)
+target_compile_definitions(video-trimmer PRIVATE APP_VERSION="${PROJECT_VERSION}")
+
+# Icon and version details for the Windows .exe.
+if(WIN32)
+    set(ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/packaging/icons/video-trimmer.ico")
+    configure_file(packaging/windows/video-trimmer.rc.in video-trimmer.rc @ONLY)
+    target_sources(video-trimmer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/video-trimmer.rc")
+endif()
+
 set_target_properties(video-trimmer PROPERTIES
     WIN32_EXECUTABLE ON
     MACOSX_BUNDLE ON
@@ -76,6 +90,16 @@ install(TARGETS video-trimmer
     BUNDLE DESTINATION .
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+if(UNIX AND NOT APPLE)
+    # App menu entry and icon on Linux desktops.
+    install(FILES packaging/linux/video-trimmer.desktop
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES packaging/icons/video-trimmer.svg
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+    install(FILES packaging/icons/video-trimmer-256.png
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
+        RENAME video-trimmer.png)
+endif()
 
 option(BUILD_TESTING "Build tests" ON)
 if(BUILD_TESTING)

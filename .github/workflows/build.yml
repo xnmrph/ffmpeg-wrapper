@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 
 jobs:
@@ -21,6 +22,21 @@ jobs:
           cmake --build build
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Install packaging tools
+        run: |
+          sudo apt-get install -y qmake6 qt6-declarative-dev-tools qt6-wayland \
+            qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls \
+            qml6-module-qtquick-dialogs qml6-module-qtquick-layouts qml6-module-qtquick-shapes \
+            qml6-module-qtquick-templates qml6-module-qtquick-window qml6-module-qt-labs-folderlistmodel \
+            qml6-module-qtcore
+      - name: Package AppImage
+        run: |
+          version=$(sed -n 's/^project(video-trimmer VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          bash .github/scripts/package-appimage.sh build "$version" dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: video-trimmer-linux-appimage
+          path: dist/*.AppImage
 
   windows:
     runs-on: windows-latest
@@ -43,6 +59,8 @@ jobs:
             mingw-w64-ucrt-x86_64-mpv
             mingw-w64-ucrt-x86_64-ffmpeg
             mingw-w64-ucrt-x86_64-qt6-tools
+            mingw-w64-ucrt-x86_64-nsis
+            zip
       - name: Build
         run: |
           # Raw logs are not always reachable, so surface compiler errors as annotations.
@@ -66,11 +84,18 @@ jobs:
                  done
                  exit 1; }
       - name: Package
-        run: bash .github/scripts/package-windows.sh build dist/video-trimmer
+        run: |
+          bash .github/scripts/package-windows.sh build dist/video-trimmer
+          version=$(sed -n 's/^project(video-trimmer VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          makensis -V2 -DVERSION="$version" -DDIST="$(cygpath -w "$PWD/dist/video-trimmer")" \
+            -DOUTFILE="$(cygpath -w "$PWD/dist/Video-Trimmer-$version-setup.exe")" packaging/windows/installer.nsi
+          (cd dist && zip -qr "Video-Trimmer-$version-windows-x64.zip" video-trimmer)
       - uses: actions/upload-artifact@v4
         with:
           name: video-trimmer-windows-x64
-          path: dist/
+          path: |
+            dist/*-setup.exe
+            dist/*.zip
 
   nix:
     runs-on: ubuntu-24.04
@@ -78,3 +103,30 @@ jobs:
       - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@v31
       - run: nix build -L
+
+  # A pushed tag like v0.2.0 publishes a GitHub release with the installers.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, nix]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check the tag matches the version
+        run: |
+          version=$(sed -n 's/^project(video-trimmer VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          [ "${GITHUB_REF_NAME#v}" = "$version" ] \
+            || { echo "::error::Tag $GITHUB_REF_NAME doesn't match version $version in CMakeLists.txt"; exit 1; }
+          grep -q "version = \"$version\";" flake.nix \
+            || { echo "::error::flake.nix has a different version from CMakeLists.txt ($version)"; exit 1; }
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "Video Trimmer ${GITHUB_REF_NAME#v}" \
+            --generate-notes artifacts/*

@@ -1,5 +1,6 @@
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -16,6 +17,10 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("Video Trimmer"));
     app.setOrganizationName(QStringLiteral("video-trimmer"));
+    app.setApplicationVersion(QStringLiteral(APP_VERSION));
+    // Matches the .desktop file, so Linux desktops group the window under it.
+    app.setDesktopFileName(QStringLiteral("video-trimmer"));
+    app.setWindowIcon(QIcon(QStringLiteral(":/packaging/icons/video-trimmer-256.png")));
 
     // libmpv refuses to initialise unless numbers are parsed the "C" way.
     std::setlocale(LC_NUMERIC, "C");

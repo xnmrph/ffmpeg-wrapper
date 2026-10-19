@@ -11,7 +11,25 @@ FFmpeg can read and steps through it frame by frame.
 | 1 | Single-video mode: preview, in/out scrubber, Fast and Accurate trims | Done |
 | 2 | Folder mode with a sidebar and an export queue | Done |
 | 3 | Output settings (folder, filename pattern, encoder options) | Done |
-| 4 | Packaging: Windows installer, Nix package, AppImage | Planned |
+| 4 | Packaging: Windows installer, Nix package, AppImage | Done |
+
+## Installing
+
+Tagged releases on the [Releases page](https://github.com/xnmrph/ffmpeg-wrapper/releases) carry:
+
+- **Windows:** `Video-Trimmer-<version>-setup.exe`, an installer with a Start menu entry and an
+  uninstaller, or `Video-Trimmer-<version>-windows-x64.zip` to run without installing. Both include
+  FFmpeg.
+- **Linux:** `Video-Trimmer-<version>-x86_64.AppImage`. Make it executable and run it; FFmpeg is
+  inside. It's built on Ubuntu 24.04, so it needs a distro at least that new (glibc 2.39).
+- **Nix / NixOS:** `nix run github:xnmrph/ffmpeg-wrapper`, or `nix profile install
+  github:xnmrph/ffmpeg-wrapper` to keep it with its menu entry. On NixOS, add the flake's
+  `overlays.default` and put `pkgs.video-trimmer` in `environment.systemPackages`.
+
+Every CI run also uploads these as build artifacts, so builds from a pull request can be tried
+before a release.
+
+To release, bump the version in `CMakeLists.txt` and `flake.nix`, then push a tag such as `v0.2.0`.
 
 ## Using it
 
@@ -81,7 +99,7 @@ app, then on `PATH`.
 ```sh
 sudo apt install cmake pkg-config ffmpeg libmpv-dev qt6-base-dev qt6-declarative-dev \
   qml6-module-qtquick-controls qml6-module-qtquick-dialogs qml6-module-qtquick-layouts \
-  qml6-module-qtquick-window qml6-module-qtqml-workerscript
+  qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtquick-shapes
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ctest --test-dir build --output-on-failure
@@ -97,11 +115,17 @@ nix develop                            # shell with every build dependency
 
 ### Windows (MSYS2 UCRT64)
 
+From an MSYS2 UCRT64 shell (install [MSYS2](https://www.msys2.org) first):
+
 ```sh
 pacman -S mingw-w64-ucrt-x86_64-{toolchain,cmake,ninja,pkgconf,qt6-base,qt6-declarative,mpv,ffmpeg}
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ./build/video-trimmer.exe
+# Optional: a self-contained folder and an installer, as CI makes them.
+pacman -S mingw-w64-ucrt-x86_64-{qt6-tools,nsis}
+bash .github/scripts/package-windows.sh build dist/video-trimmer
+makensis -DVERSION=0.1.0 -DDIST="$(cygpath -w "$PWD/dist/video-trimmer")" packaging/windows/installer.nsi
 ```
 
 ## Layout
@@ -112,9 +136,14 @@ cmake --build build
 - `src/VideoFolderModel.*` lists the videos in a folder, in natural order, with their queue state.
 - `src/Settings.*` holds the saved choices; `src/Encoders.*` maps each encoder to FFmpeg arguments, and
   `src/EncoderProbe.*` finds FFmpeg and tests which encoders work.
-- `qml/Main.qml` is the window, `qml/Scrubber.qml` the timeline with the in/out handles, and
-  `qml/FileSidebar.qml` and `qml/QueuePanel.qml` the folder-mode side panels, and
-  `qml/SettingsDialog.qml` the Settings window.
+- `src/MediaPreview.*` makes the timeline's thumbnails and waveform with FFmpeg and caches them;
+  `src/WaveformView.*` draws the waveform.
+- `qml/Main.qml` is the window, `qml/Timeline.qml` the ruler, thumbnail and audio tracks with the
+  in/out handles, `qml/FileSidebar.qml` and `qml/QueuePanel.qml` the folder-mode side panels, and
+  `qml/SettingsDialog.qml` the Settings window. `qml/Theme.qml` holds the colours and
+  `qml/Icons.qml` the icon shapes.
+- `packaging/` has the icon, the Linux menu entry and the Windows installer script;
+  `.github/scripts/` builds the Windows folder and the AppImage.
 - `tests/` holds tests for the C++ classes, which generate clips and check real FFmpeg output.
 
 Set `VIDEO_TRIMMER_MPV_LOG=v` to print mpv's log when debugging playback.

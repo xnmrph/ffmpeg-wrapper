@@ -13,7 +13,7 @@ cp "$build/video-trimmer.exe" "$dist/"
 cp "$prefix/bin/ffmpeg.exe" "$prefix/bin/ffprobe.exe" "$dist/"
 
 deployqt=$(command -v windeployqt6 || command -v windeployqt)
-"$deployqt" --release --no-translations --qmldir qml "$dist/video-trimmer.exe"
+"$deployqt" --release --no-translations --qmldir qml --qmldir packaging/qml-deploy "$dist/video-trimmer.exe"
 
 # Copy every DLL from the MSYS2 prefix that anything in the folder links to,
 # repeating until nothing new turns up.

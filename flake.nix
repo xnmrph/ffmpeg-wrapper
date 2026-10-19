@@ -21,7 +21,7 @@
         packages.default = pkgs.stdenv.mkDerivation {
           pname = "video-trimmer";
           # Keep in step with project(VERSION) in CMakeLists.txt; CI checks this.
-          version = "1.0.0";
+          version = "1.0.1";
           src = ./.;
 
           nativeBuildInputs = with pkgs; [ cmake pkg-config qt6.wrapQtAppsHook ];

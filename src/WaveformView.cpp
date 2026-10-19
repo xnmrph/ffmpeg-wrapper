@@ -36,6 +36,13 @@ void WaveformView::paint(QPainter *painter)
     const qsizetype n = m_peaks.size();
     painter->setPen(QPen(m_color, 1));
 
+    // Scale so the loudest moment fills the track, like a normalised view;
+    // capped so near-silence doesn't turn into a wall of noise.
+    qreal loudest = 0;
+    for (qreal p : std::as_const(m_peaks))
+        loudest = qMax(loudest, p);
+    const qreal gain = loudest > 0 ? qMin(1 / loudest, 20.0) : 1;
+
     for (int x = 0; x < columns; ++x) {
         // Loudest peak among the samples this pixel column covers.
         const qsizetype from = qsizetype(x) * n / columns;
@@ -44,7 +51,7 @@ void WaveformView::paint(QPainter *painter)
         for (qsizetype i = from; i < to && i < n; ++i)
             peak = qMax(peak, m_peaks.at(i));
         // A gentle curve keeps quiet passages visible, as editors do.
-        const qreal h = std::sqrt(peak) * (mid - 1);
+        const qreal h = std::sqrt(qMin(1.0, peak * gain)) * (mid - 1);
         painter->drawLine(QPointF(x + 0.5, mid - h), QPointF(x + 0.5, mid + h));
     }
 }

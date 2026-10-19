@@ -121,7 +121,7 @@ Rectangle {
                     required property int index
                     x: root.xFor(index * root.majorStep) + 4
                     y: 2
-                    text: Theme.rulerLabel(index * root.majorStep)
+                    text: Theme.rulerLabel(index * root.majorStep, root.majorStep, root.fps)
                     color: Theme.textDim
                     font.pixelSize: 10
                     font.family: Theme.mono

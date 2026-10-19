@@ -36,10 +36,12 @@ QtObject {
         return hms + "." + pad(Math.floor((t - whole) * 1000 + 1e-6), 3)
     }
 
-    // Short form for ruler labels.
-    function rulerLabel(t) {
+    // Short form for ruler labels; steps under a second need the frame.
+    function rulerLabel(t, step, fps) {
+        if (step < 1)
+            return timecode(t, fps)
         const pad = n => String(n).padStart(2, "0")
-        const s = Math.round(t)
+        const s = Math.floor(t + 1e-6)
         return pad(Math.floor(s / 3600)) + ":" + pad(Math.floor(s / 60) % 60) + ":" + pad(s % 60)
     }
 }

@@ -1,10 +1,17 @@
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
-qt_add_executable(tst_trimjob
-    tst_trimjob.cpp
+# The core classes, built once for every test.
+add_library(trimmer_core STATIC
     ../src/TrimJob.h ../src/TrimJob.cpp
+    ../src/ExportQueue.h ../src/ExportQueue.cpp
+    ../src/VideoFolderModel.h ../src/VideoFolderModel.cpp
 )
-target_include_directories(tst_trimjob PRIVATE ../src)
-target_link_libraries(tst_trimjob PRIVATE Qt6::Core Qt6::Qml Qt6::Test)
+set_target_properties(trimmer_core PROPERTIES AUTOMOC ON)
+target_include_directories(trimmer_core PUBLIC ../src)
+target_link_libraries(trimmer_core PUBLIC Qt6::Core Qt6::Qml)
 
-add_test(NAME tst_trimjob COMMAND tst_trimjob)
+foreach(test tst_trimjob tst_exportqueue tst_videofoldermodel)
+    qt_add_executable(${test} ${test}.cpp testclip.h)
+    target_link_libraries(${test} PRIVATE trimmer_core Qt6::Test)
+    add_test(NAME ${test} COMMAND ${test})
+endforeach()

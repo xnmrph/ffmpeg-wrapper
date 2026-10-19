@@ -53,6 +53,8 @@ public:
 
     Q_INVOKABLE void start();
     Q_INVOKABLE void cancel();
+    // Back to Idle so a failed or cancelled job can run again.
+    Q_INVOKABLE void reset();
     // Folder containing the output, for "Show in folder".
     Q_INVOKABLE QUrl outputFolderUrl() const;
 

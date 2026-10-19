@@ -211,6 +211,16 @@ void TrimJob::cancel()
     emit finished();
 }
 
+void TrimJob::reset()
+{
+    if (m_state == Running)
+        return;
+    setProgress(0);
+    setErrorString({});
+    setOutput({});
+    setState(Idle);
+}
+
 QUrl TrimJob::outputFolderUrl() const
 {
     return QUrl::fromLocalFile(QFileInfo(m_output).absolutePath());

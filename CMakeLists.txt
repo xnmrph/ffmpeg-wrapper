@@ -38,9 +38,13 @@ qt_add_qml_module(video-trimmer
     QML_FILES
         qml/Main.qml
         qml/Scrubber.qml
+        qml/FileSidebar.qml
+        qml/QueuePanel.qml
     SOURCES
         src/MpvItem.h src/MpvItem.cpp
         src/TrimJob.h src/TrimJob.cpp
+        src/ExportQueue.h src/ExportQueue.cpp
+        src/VideoFolderModel.h src/VideoFolderModel.cpp
 )
 
 target_link_libraries(video-trimmer PRIVATE

@@ -1,4 +1,5 @@
 #include "TrimJob.h"
+#include "testclip.h"
 
 #include <QFileInfo>
 #include <QProcess>
@@ -35,16 +36,7 @@ void TestTrimJob::initTestCase()
 
     // 20 s at 30 fps with a keyframe every 2 s, so fast and accurate cuts differ.
     m_clip = m_dir.filePath("clip.mp4");
-    QProcess p;
-    p.start(TrimJob::ffmpegPath(), {
-        "-hide_banner", "-loglevel", "error", "-y",
-        "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30:duration=20",
-        "-f", "lavfi", "-i", "sine=frequency=440:duration=20",
-        "-c:v", "libx264", "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
-        "-c:a", "aac", "-shortest", m_clip,
-    });
-    QVERIFY(p.waitForFinished(60000));
-    QCOMPARE(p.exitCode(), 0);
+    QVERIFY(makeTestClip(m_clip));
 }
 
 double TestTrimJob::probeDuration(const QString &path)

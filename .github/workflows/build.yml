@@ -5,6 +5,13 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+  # Run by hand from the Actions tab; "release" publishes the current version.
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Publish a release for the version in CMakeLists.txt
+        type: boolean
+        default: false
 
 jobs:
   linux:
@@ -104,22 +111,26 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - run: nix build -L
 
-  # A pushed tag like v0.2.0 publishes a GitHub release with the installers.
+  # A pushed tag like v0.2.0, or a manual run with "release" ticked, publishes a
+  # GitHub release with the installers.
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release)
     needs: [linux, windows, nix]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v5
-      - name: Check the tag matches the version
+      - name: Check the versions match
         run: |
           version=$(sed -n 's/^project(video-trimmer VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
-          [ "${GITHUB_REF_NAME#v}" = "$version" ] \
-            || { echo "::error::Tag $GITHUB_REF_NAME doesn't match version $version in CMakeLists.txt"; exit 1; }
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            [ "${GITHUB_REF_NAME#v}" = "$version" ] \
+              || { echo "::error::Tag $GITHUB_REF_NAME doesn't match version $version in CMakeLists.txt"; exit 1; }
+          fi
           grep -q "version = \"$version\";" flake.nix \
             || { echo "::error::flake.nix has a different version from CMakeLists.txt ($version)"; exit 1; }
+          echo "TAG=v$version" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -128,5 +139,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --title "Video Trimmer ${GITHUB_REF_NAME#v}" \
+          # Creates the tag at this commit when the run wasn't started by one.
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "Video Trimmer ${TAG#v}" \
             --generate-notes artifacts/*

@@ -29,7 +29,7 @@ Tagged releases on the [Releases page](https://github.com/xnmrph/ffmpeg-wrapper/
 Every CI run also uploads these as build artifacts, so builds from a pull request can be tried
 before a release.
 
-To release, bump the version in `CMakeLists.txt` and `flake.nix`, then push a tag such as `v0.2.0`.
+To release, bump the version in `CMakeLists.txt` and `flake.nix`, then push a tag such as `v0.2.0`, or run the Build workflow from the Actions tab with "release" ticked.
 
 ## Using it
 

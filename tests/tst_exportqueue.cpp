@@ -187,7 +187,7 @@ void TestExportQueue::usesSettingsWhenJobsStart()
     // Without an organisation name, Windows has no registry key to keep
     // settings in, so nothing set here would be read back.
     QStandardPaths::setTestModeEnabled(true);
-    QCoreApplication::setOrganizationName("video-trimmer-tests");
+    QCoreApplication::setOrganizationName("mxcut-tests");
     QCoreApplication::setApplicationName("tst_exportqueue");
     QSettings().clear();
     Settings settings;

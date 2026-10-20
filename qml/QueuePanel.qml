@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Trimmer
+import MxCut
 
 // Folder mode's right panel: the export queue and its controls.
 Rectangle {

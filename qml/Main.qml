@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtQuick.Controls.Material
 import QtQuick.Dialogs
 import QtQuick.Layouts
-import Trimmer
+import MxCut
 
 ApplicationWindow {
     id: window

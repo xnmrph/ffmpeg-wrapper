@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Trimmer
+import MxCut
 
 // Folder mode's left panel: every video in the folder and its queue state.
 Rectangle {

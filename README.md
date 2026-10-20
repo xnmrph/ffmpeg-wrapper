@@ -44,6 +44,15 @@ drag anywhere else on the timeline to scrub. Choose a mode and click **Trim**.
 The result is saved next to the original as `<name>_trim.<ext>`, or takes the
 original's place when "Replace the original video" is on in Settings.
 
+To keep several parts of a video, press **+** next to the in/out buttons (S):
+each segment gets its own colour (blue, green, orange, yellow, purple, up to
+five) on the timeline and its own in/out box below it. Click a box, or drag
+one of its handles, to make it the one the in/out keys change; × removes it.
+The segments are joined in time order into one file, and **Duration** shows
+their total. Fast mode starts each part at the keyframe before it, so with
+long gaps between keyframes the joined clip carries extra footage; Accurate
+mode joins exactly what you marked.
+
 ### A folder of videos
 
 Open a folder with **Open folder…** (or drop one onto the window, or pass it on
@@ -62,6 +71,7 @@ points you set are kept while you move between videos.
 | ← / → | Step one frame back / forward |
 | Shift + ← / → | Jump 5 seconds |
 | [ / ] | Jump to the in / out point |
+| S | Add a segment |
 | Q | Add to queue (folder mode) |
 | ↑ / ↓ | Previous / next video (folder mode) |
 | Ctrl + O | Open a video |

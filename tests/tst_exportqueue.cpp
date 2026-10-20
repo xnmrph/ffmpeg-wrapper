@@ -23,6 +23,7 @@ private slots:
     void cancelStopsTheQueue();
     void removeAndClearFinished();
     void usesSettingsWhenJobsStart();
+    void queuesSegments();
 
 private:
     QUrl clip(int n) const { return QUrl::fromLocalFile(m_clips.at(n)); }
@@ -205,6 +206,32 @@ void TestExportQueue::usesSettingsWhenJobsStart()
     QCOMPARE(out, QDir(m_dir.filePath("exports")).filePath("clip0-cut.mp4"));
     QVERIFY(QFileInfo::exists(out));
     QSettings().clear();
+}
+
+void TestExportQueue::queuesSegments()
+{
+    ExportQueue queue;
+    const QVariantList parts{
+        QVariantMap{{"inPoint", 1.0}, {"outPoint", 2.0}},
+        QVariantMap{{"inPoint", 5.0}, {"outPoint", 6.5}},
+    };
+    queue.add(clip(2), 1.0, 2.0, TrimJob::Accurate, parts);
+    const QModelIndex row = queue.index(0);
+    QCOMPARE(queue.data(row, ExportQueue::SegmentCountRole).toInt(), 2);
+    QCOMPARE(queue.data(row, ExportQueue::KeptDurationRole).toDouble(), 2.5);
+    QCOMPARE(queue.jobFor(clip(2))->segments().size(), 2);
+
+    // Queuing it again with one segment goes back to a plain cut.
+    queue.add(clip(2), 3.0, 4.0, TrimJob::Accurate);
+    QCOMPARE(queue.count(), 1);
+    QCOMPARE(queue.data(row, ExportQueue::SegmentCountRole).toInt(), 1);
+    QCOMPARE(queue.data(row, ExportQueue::InPointRole).toDouble(), 3.0);
+
+    queue.add(clip(2), 1.0, 2.0, TrimJob::Accurate, parts);
+    queue.start();
+    QVERIFY(waitForAll(queue));
+    QCOMPARE(queue.finishedCount(), 1);
+    QFile::remove(queue.data(row, ExportQueue::OutputRole).toString());
 }
 
 QTEST_GUILESS_MAIN(TestExportQueue)

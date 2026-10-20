@@ -36,6 +36,10 @@ class TrimJob : public QObject
     Q_PROPERTY(QString output READ output WRITE setOutput NOTIFY outputChanged)
     Q_PROPERTY(double inPoint READ inPoint WRITE setInPoint NOTIFY inPointChanged)
     Q_PROPERTY(double outPoint READ outPoint WRITE setOutPoint NOTIFY outPointChanged)
+    // Parts of the video to keep, as {inPoint, outPoint} objects. With two or
+    // more they are joined, in time order, into one file; otherwise the in
+    // and out points above are used.
+    Q_PROPERTY(QVariantList segments READ segments WRITE setSegments NOTIFY segmentsChanged)
     Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
     Q_PROPERTY(State state READ state NOTIFY stateChanged)
     Q_PROPERTY(bool running READ running NOTIFY stateChanged)
@@ -65,6 +69,10 @@ public:
     void setInPoint(double seconds);
     double outPoint() const { return m_outPoint; }
     void setOutPoint(double seconds);
+    QVariantList segments() const;
+    void setSegments(const QVariantList &segments);
+    // Total length of what is kept.
+    double keptDuration() const;
     Mode mode() const { return m_mode; }
     void setMode(Mode mode);
     State state() const { return m_state; }
@@ -85,7 +93,8 @@ public:
     // Folder containing the output, for "Show in folder".
     Q_INVOKABLE QUrl outputFolderUrl() const;
 
-    // The FFmpeg arguments for the current settings (output must be set).
+    // The FFmpeg arguments for one in/out range with the current settings
+    // (output must be set).
     QStringList arguments() const;
 
     // A path chosen in Settings wins, then FFmpeg next to the app binary (so
@@ -107,6 +116,7 @@ signals:
     void outputChanged();
     void inPointChanged();
     void outPointChanged();
+    void segmentsChanged();
     void modeChanged();
     void stateChanged();
     void progressChanged();
@@ -123,6 +133,16 @@ private:
     void setProgress(double progress);
     void setErrorString(const QString &error, const QString &details = {});
     void fail(const QString &error);
+    struct Range {
+        double in = 0;
+        double out = 0;
+    };
+    QList<Range> ranges() const;
+    QStringList argumentsFor(const Range &range, const QString &output) const;
+    QStringList joinedAccurateArguments(const QList<Range> &ranges, bool withAudio) const;
+    QStringList concatArguments(const QString &listFile) const;
+    void runStep();
+    void removeTemporaryFiles();
     void readProgress();
     void onProcessFinished(int exitCode, QProcess::ExitStatus status);
     void replaceOriginal();
@@ -132,6 +152,7 @@ private:
     QString m_output;
     double m_inPoint = 0;
     double m_outPoint = 0;
+    QList<Range> m_segments;
     Mode m_mode = Fast;
     State m_state = Idle;
     double m_progress = 0;
@@ -142,4 +163,16 @@ private:
     QByteArray m_stdoutBuffer;
     QByteArray m_stderrTail;
     int m_replaceTries = 0;
+
+    // A trim is one or more FFmpeg runs: one per kept part plus a join in
+    // Fast mode, a single run otherwise.
+    struct Step {
+        QStringList arguments;
+        double progressStart = 0;
+        double progressPerSecond = 0;
+    };
+    QString m_ffmpeg;
+    QList<Step> m_steps;
+    qsizetype m_step = 0;
+    QStringList m_temporaryFiles;
 };

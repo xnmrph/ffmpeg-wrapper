@@ -51,7 +51,7 @@ Dialog {
         signal picked(string key)
 
         // Keys the app already uses for something else.
-        readonly property var reserved: ["SPACE", "Q", "[", "]"]
+        readonly property var reserved: ["SPACE", "Q", "S", "[", "]"]
 
         function keyName(event) {
             if (event.key >= Qt.Key_F1 && event.key <= Qt.Key_F12)
@@ -338,7 +338,7 @@ Dialog {
                         onPicked: key => root.settings.outKey = key
                     }
                     Item { implicitWidth: 1 }
-                    Hint { text: "Click a key, then press the one you want. Esc keeps the old key. Space, Q, [ and ] are already used." }
+                    Hint { text: "Click a key, then press the one you want. Esc keeps the old key. Space, Q, S, [ and ] are already used." }
                     Item { implicitWidth: 1 }
                     Button {
                         text: "Reset to A and D"

@@ -26,6 +26,8 @@ private slots:
     void reportsUnreadableInput();
     void replacesOriginal();
     void replaceKeepsOtherFiles();
+    void joinsSegments_data();
+    void joinsSegments();
 
 private:
     double probeDuration(const QString &path);
@@ -286,6 +288,66 @@ void TestTrimJob::replaceKeepsOtherFiles()
     QCOMPARE(QFileInfo(other).size(), qint64(19));
     QCOMPARE(QFileInfo(job.output()).fileName(), QStringLiteral("keep_trim.mp4"));
     QVERIFY(QFileInfo::exists(job.output()));
+}
+
+void TestTrimJob::joinsSegments_data()
+{
+    QTest::addColumn<int>("mode");
+    QTest::addColumn<bool>("replace");
+    QTest::addColumn<bool>("silent");
+    QTest::newRow("fast") << int(TrimJob::Fast) << false << false;
+    QTest::newRow("accurate") << int(TrimJob::Accurate) << false << false;
+    QTest::newRow("accurate, replacing") << int(TrimJob::Accurate) << true << false;
+    QTest::newRow("accurate, no audio") << int(TrimJob::Accurate) << false << true;
+}
+
+void TestTrimJob::joinsSegments()
+{
+    QFETCH(int, mode);
+    QFETCH(bool, replace);
+    QFETCH(bool, silent);
+    QTemporaryDir dir;
+    const QString video = dir.filePath("parts.mp4");
+    if (silent) {
+        QProcess p;
+        p.start(TrimJob::ffmpegPath(), {"-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+                                        "-i", "testsrc2=size=160x120:rate=30:duration=20", "-c:v", "libx264",
+                                        "-g", "60", video});
+        QVERIFY(p.waitForFinished(60000) && p.exitCode() == 0);
+    } else {
+        QVERIFY(QFile::copy(m_clip, video));
+    }
+
+    TrimJob job;
+    TrimOptions options;
+    options.replaceOriginal = replace;
+    job.setOptions(options);
+    job.setSource(QUrl::fromLocalFile(video));
+    job.setMode(TrimJob::Mode(mode));
+    // Given out of order; they are joined in time order.
+    job.setSegments({
+        QVariantMap{{"inPoint", 12.0}, {"outPoint", 14.0}},
+        QVariantMap{{"inPoint", 4.0}, {"outPoint", 7.0}},
+    });
+    QCOMPARE(job.inPoint(), 4.0);
+    QCOMPARE(job.outPoint(), 14.0);
+    QCOMPARE(job.keptDuration(), 5.0);
+    QVERIFY(runTrim(job));
+    QVERIFY2(job.state() == TrimJob::Finished, qPrintable(job.errorString() + "\n" + job.errorDetails()));
+    QCOMPARE(job.progress(), 1.0);
+
+    if (replace)
+        QCOMPARE(job.output(), video);
+    const double d = probeDuration(job.output());
+    // Fast cuts snap to keyframes (every 2 s here), the joined length with them.
+    if (mode == TrimJob::Accurate)
+        QVERIFY2(qAbs(d - 5.0) < 0.1, qPrintable(QString::number(d)));
+    else
+        QVERIFY2(d >= 4.9 && d < 9.1, qPrintable(QString::number(d)));
+    QStringList left = QDir(dir.path()).entryList(QDir::Files);
+    left.removeAll("parts.mp4");
+    left.removeAll(QFileInfo(job.output()).fileName());
+    QVERIFY2(left.isEmpty(), qPrintable(left.join(", ")));
 }
 
 QTEST_GUILESS_MAIN(TestTrimJob)

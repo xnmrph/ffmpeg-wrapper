@@ -66,6 +66,8 @@ Rectangle {
                 required property url source
                 required property real inPoint
                 required property real outPoint
+                required property int segmentCount
+                required property real keptDuration
                 required property int mode
                 required property int jobState
                 required property real progress
@@ -123,7 +125,9 @@ Rectangle {
                     }
                     Text {
                         Layout.fillWidth: true
-                        text: root.formatTime(row.inPoint) + "  →  " + root.formatTime(row.outPoint)
+                        text: row.segmentCount > 1
+                              ? row.segmentCount + " segments, " + root.formatTime(row.keptDuration) + " in all"
+                              : root.formatTime(row.inPoint) + "  →  " + root.formatTime(row.outPoint)
                         color: Theme.textDim
                         font.pixelSize: 11
                         font.family: Theme.mono

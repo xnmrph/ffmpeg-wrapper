@@ -3,7 +3,7 @@ import QtQuick.Shapes
 import Trimmer
 
 // Premiere-style timeline: a time ruler, a video track of thumbnails and an
-// audio track with the waveform, with the in/out range, its handles and the
+// audio track with the waveform, with the kept segments, their handles and the
 // playhead drawn across all three. It only reports what the user did; the
 // owner decides how to seek and where to keep the points.
 Rectangle {
@@ -11,8 +11,10 @@ Rectangle {
 
     property real duration: 0
     property real position: 0
-    property real inPoint: 0
-    property real outPoint: 0
+    // The parts to keep, as {inPoint, outPoint}, each drawn in its own colour;
+    // activeSegment is the one the in/out keys change.
+    property var segments: []
+    property int activeSegment: 0
     property real fps: 0
     property string clipName
     property var thumbnails: []
@@ -22,8 +24,8 @@ Rectangle {
     property real minimumLength: 0.04
 
     signal seekRequested(real time, bool exact)
-    signal inPointMoved(real time)
-    signal outPointMoved(real time)
+    signal segmentMoved(int index, real inPoint, real outPoint)
+    signal segmentSelected(int index)
 
     // Where the user is scrubbing to, or -1. The playhead follows the mouse
     // until the player has caught up, so it never jumps ahead to a keyframe.
@@ -117,14 +119,19 @@ Rectangle {
             height: root.rulerHeight
             clip: true
 
-            // In/out range on the ruler.
-            Rectangle {
-                x: root.xFor(root.inPoint)
-                width: Math.max(0, root.xFor(root.outPoint) - x)
-                anchors.bottom: parent.bottom
-                height: 6
-                color: Theme.accent
-                opacity: 0.45
+            // Each segment's range on the ruler.
+            Repeater {
+                model: root.segments
+                delegate: Rectangle {
+                    required property var modelData
+                    required property int index
+                    x: root.xFor(modelData.inPoint)
+                    width: Math.max(0, root.xFor(modelData.outPoint) - x)
+                    anchors.bottom: parent.bottom
+                    height: 6
+                    color: root.segments.length > 1 ? Theme.segmentColor(index) : Theme.accent
+                    opacity: index === root.activeSegment ? 0.7 : 0.4
+                }
             }
 
             Repeater {
@@ -233,21 +240,31 @@ Rectangle {
             }
         }
 
-        // Everything outside the in/out range is dimmed.
-        Rectangle {
-            y: videoClip.y
-            width: root.xFor(root.inPoint)
-            height: audioClip.y + audioClip.height - y
-            color: "black"
-            opacity: 0.6
-        }
-        Rectangle {
-            x: root.xFor(root.outPoint)
-            y: videoClip.y
-            width: Math.max(0, parent.width - x)
-            height: audioClip.y + audioClip.height - y
-            color: "black"
-            opacity: 0.6
+        // Everything outside the segments is dimmed.
+        Repeater {
+            model: {
+                // The gaps between the segments, merged where they overlap.
+                const kept = root.segments.slice().sort((a, b) => a.inPoint - b.inPoint)
+                const gaps = []
+                let from = 0
+                for (const s of kept) {
+                    if (s.inPoint > from)
+                        gaps.push({ from: from, to: s.inPoint })
+                    from = Math.max(from, s.outPoint)
+                }
+                if (from < root.duration)
+                    gaps.push({ from: from, to: root.duration })
+                return gaps
+            }
+            delegate: Rectangle {
+                required property var modelData
+                x: root.xFor(modelData.from)
+                y: videoClip.y
+                width: Math.max(0, root.xFor(modelData.to) - x)
+                height: audioClip.y + audioClip.height - y
+                color: "black"
+                opacity: 0.6
+            }
         }
 
         // Click or drag anywhere to scrub. Every seek is frame exact; mpv
@@ -264,7 +281,13 @@ Rectangle {
         component Handle: Item {
             id: handle
             property bool isIn: true
-            readonly property real time: isIn ? root.inPoint : root.outPoint
+            property int segment: 0
+            readonly property var range: root.segments[segment] || { inPoint: 0, outPoint: 0 }
+            readonly property real time: isIn ? range.inPoint : range.outPoint
+            readonly property color tint: root.segments.length > 1 ? Theme.segmentColor(segment) : Theme.accent
+            readonly property bool active: segment === root.activeSegment
+            z: active ? 2 : 1
+            opacity: active || root.segments.length < 2 ? 1 : 0.7
 
             x: root.xFor(time) - width / 2
             width: 14
@@ -277,7 +300,7 @@ Rectangle {
                 y: videoClip.y
                 width: 3
                 height: parent.height - y
-                color: dragArea.pressed || dragArea.containsMouse ? Qt.lighter(Theme.accent, 1.3) : Theme.accent
+                color: dragArea.pressed || dragArea.containsMouse ? Qt.lighter(handle.tint, 1.3) : handle.tint
             }
             // Tab on the ruler.
             Rectangle {
@@ -286,11 +309,11 @@ Rectangle {
                 width: 10
                 height: 16
                 radius: 2
-                color: Theme.accent
+                color: handle.tint
                 Text {
                     anchors.centerIn: parent
                     text: handle.isIn ? "<" : ">"
-                    color: "white"
+                    color: Theme.onColor(handle.tint)
                     font.pixelSize: 9
                     font.bold: true
                 }
@@ -308,17 +331,19 @@ Rectangle {
                 cursorShape: Qt.SizeHorCursor
                 preventStealing: true
 
+                onPressed: root.segmentSelected(handle.segment)
                 onPositionChanged: (mouse) => {
                     if (!pressed)
                         return
                     const t = root.timeAt(mapToItem(lane, mouse.x, 0).x)
+                    const r = handle.range
                     if (handle.isIn) {
-                        const v = Math.max(0, Math.min(t, root.outPoint - root.minimumLength))
-                        root.inPointMoved(v)
+                        const v = Math.max(0, Math.min(t, r.outPoint - root.minimumLength))
+                        root.segmentMoved(handle.segment, v, r.outPoint)
                         root.scrubTo(v, true)
                     } else {
-                        const v = Math.min(root.duration, Math.max(t, root.inPoint + root.minimumLength))
-                        root.outPointMoved(v)
+                        const v = Math.min(root.duration, Math.max(t, r.inPoint + root.minimumLength))
+                        root.segmentMoved(handle.segment, r.inPoint, v)
                         root.scrubTo(v, true)
                     }
                 }
@@ -326,8 +351,16 @@ Rectangle {
             }
         }
 
-        Handle { isIn: true }
-        Handle { isIn: false }
+        Repeater {
+            model: root.segments.length
+            delegate: Item {
+                required property int index
+                anchors.fill: parent
+                z: index === root.activeSegment ? 2 : 1
+                Handle { isIn: true; segment: parent.index }
+                Handle { isIn: false; segment: parent.index }
+            }
+        }
 
         // Playhead: a tab on the ruler and a line through the tracks.
         Item {

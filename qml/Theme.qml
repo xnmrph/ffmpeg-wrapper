@@ -18,6 +18,11 @@ QtObject {
     readonly property color videoClip: "#24467e"
     readonly property color audioClip: "#0f3a24"
     readonly property color waveform: "#3ddc84"
+    // One colour per segment of a cut, in the order they are added.
+    readonly property var segmentColors: ["#2d8cff", "#2fbf71", "#ff8c32", "#f2c94c", "#a970ff"]
+    function segmentColor(i) { return segmentColors[i % segmentColors.length] }
+    // Text that reads on top of a segment colour.
+    function onColor(c) { return 0.299 * c.r + 0.587 * c.g + 0.114 * c.b > 0.6 ? "#000000" : "#ffffff" }
     readonly property int radius: 6
     readonly property string mono: Qt.platform.os === "windows" ? "Consolas"
                                   : Qt.platform.os === "osx" ? "Menlo" : "monospace"

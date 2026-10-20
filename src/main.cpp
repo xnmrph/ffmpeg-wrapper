@@ -31,17 +31,28 @@ int main(int argc, char *argv[])
     qputenv("QT_QUICK_CONTROLS_MATERIAL_VARIANT", "Dense");
     QQuickStyle::setStyle(QStringLiteral("Material"));
 
+    // --check-startup loads the window and quits, for CI to prove a packaged
+    // build finds everything it needs.
+    QStringList args = app.arguments();
+    const bool checkStartup = args.removeAll(QStringLiteral("--check-startup")) > 0;
     QUrl initialSource;
-    const QStringList args = app.arguments();
     if (args.size() > 1)
         initialSource = QUrl::fromLocalFile(QFileInfo(args.at(1)).absoluteFilePath());
 
     QQmlApplicationEngine engine;
     engine.addImportPath(QStringLiteral("qrc:/"));
+    // Packaged builds ship Qt's QML modules in a qml folder beside the app.
+    // Put it first: Qt also finds these modules' qmldir files built into its
+    // own libraries, and looking for their plugins there fails on Windows.
+    const QString bundledQml = QCoreApplication::applicationDirPath() + QStringLiteral("/qml");
+    if (QFileInfo(bundledQml).isDir())
+        engine.addImportPath(bundledQml);
     engine.setInitialProperties({{QStringLiteral("initialSource"), initialSource}});
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl(QStringLiteral("qrc:/Trimmer/qml/Main.qml")));
+    if (checkStartup)
+        return engine.rootObjects().isEmpty() ? 1 : 0;
 
     return app.exec();
 }

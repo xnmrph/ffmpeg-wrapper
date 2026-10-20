@@ -97,6 +97,11 @@ jobs:
           makensis -V2 -DVERSION="$version" -DDIST="$(cygpath -w "$PWD/dist/video-trimmer")" \
             -DOUTFILE="$(cygpath -w "$PWD/dist/mxCut-$version-setup.exe")" packaging/windows/installer.nsi
           (cd dist && zip -qr "mxCut-$version-windows-x64.zip" video-trimmer)
+      - name: Check the packaged app starts
+        run: |
+          # Run it from a folder outside MSYS2 so it can only use what we ship.
+          cp -r dist/video-trimmer "$RUNNER_TEMP/startup-check"
+          PATH=/c/Windows/system32:/c/Windows timeout 120 "$RUNNER_TEMP/startup-check/video-trimmer.exe" --check-startup
       - uses: actions/upload-artifact@v4
         with:
           name: video-trimmer-windows-x64

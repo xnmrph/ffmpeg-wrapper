@@ -8,9 +8,9 @@
 
   outputs = { self, nixpkgs, flake-utils }:
     {
-      # For NixOS or home-manager: add this overlay, then pkgs.video-trimmer.
+      # For NixOS or home-manager: add this overlay, then pkgs.mxcut.
       overlays.default = final: prev: {
-        video-trimmer = self.packages.${prev.stdenv.hostPlatform.system}.default;
+        mxcut = self.packages.${prev.stdenv.hostPlatform.system}.default;
       };
     } //
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
@@ -19,7 +19,7 @@
       in
       {
         packages.default = pkgs.stdenv.mkDerivation {
-          pname = "video-trimmer";
+          pname = "mxcut";
           # Keep in step with project(VERSION) in CMakeLists.txt; CI checks this.
           version = "1.0.3";
           src = ./.;
@@ -34,8 +34,8 @@
 
           meta = {
             description = "Trim videos singly or in batches with FFmpeg";
-            mainProgram = "video-trimmer";
-            homepage = "https://github.com/xnmrph/ffmpeg-wrapper";
+            mainProgram = "mxcut";
+            homepage = "https://github.com/xnmrph/mxCut";
             platforms = pkgs.lib.platforms.linux;
           };
         };

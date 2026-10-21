@@ -106,8 +106,8 @@ MpvItem::MpvItem(QQuickItem *parent)
     if (mpv_initialize(handle) < 0)
         throw std::runtime_error("failed to initialise mpv");
 
-    // Set VIDEO_TRIMMER_MPV_LOG=v (or debug, info, ...) to see mpv's log.
-    const QByteArray logLevel = qgetenv("VIDEO_TRIMMER_MPV_LOG");
+    // Set MXCUT_MPV_LOG=v (or debug, info, ...) to see mpv's log.
+    const QByteArray logLevel = qgetenv("MXCUT_MPV_LOG");
     if (!logLevel.isEmpty())
         mpv_request_log_messages(handle, logLevel.constData());
 

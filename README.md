@@ -17,16 +17,16 @@ FFmpeg can read and steps through it frame by frame.
 
 ## Installing
 
-Tagged releases on the [Releases page](https://github.com/xnmrph/ffmpeg-wrapper/releases) carry:
+Tagged releases on the [Releases page](https://github.com/xnmrph/mxCut/releases) carry:
 
 - **Windows:** `mxCut-<version>-setup.exe`, an installer with a Start menu entry and an
   uninstaller, or `mxCut-<version>-windows-x64.zip` to run without installing. Both include
   FFmpeg.
 - **Linux:** `mxCut-<version>-x86_64.AppImage`. Make it executable and run it; FFmpeg is
   inside. It's built on Ubuntu 24.04, so it needs a distro at least that new (glibc 2.39).
-- **Nix / NixOS:** `nix run github:xnmrph/ffmpeg-wrapper`, or `nix profile install
-  github:xnmrph/ffmpeg-wrapper` to keep it with its menu entry. On NixOS, add the flake's
-  `overlays.default` and put `pkgs.video-trimmer` in `environment.systemPackages`.
+- **Nix / NixOS:** `nix run github:xnmrph/mxCut`, or `nix profile install
+  github:xnmrph/mxCut` to keep it with its menu entry. On NixOS, add the flake's
+  `overlays.default` and put `pkgs.mxcut` in `environment.systemPackages`.
 
 Every CI run also uploads these as build artifacts, so builds from a pull request can be tried
 before a release.
@@ -122,13 +122,13 @@ sudo apt install cmake pkg-config ffmpeg libmpv-dev qt6-base-dev qt6-declarative
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ctest --test-dir build --output-on-failure
-./build/video-trimmer
+./build/mxcut
 ```
 
 ### Nix
 
 ```sh
-nix run github:xnmrph/ffmpeg-wrapper   # run it
+nix run github:xnmrph/mxCut   # run it
 nix develop                            # shell with every build dependency
 ```
 
@@ -140,11 +140,11 @@ From an MSYS2 UCRT64 shell (install [MSYS2](https://www.msys2.org) first):
 pacman -S mingw-w64-ucrt-x86_64-{toolchain,cmake,ninja,pkgconf,qt6-base,qt6-declarative,mpv,ffmpeg}
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-./build/video-trimmer.exe
+./build/mxcut.exe
 # Optional: a self-contained folder and an installer, as CI makes them.
 pacman -S mingw-w64-ucrt-x86_64-{qt6-tools,nsis}
-bash .github/scripts/package-windows.sh build dist/video-trimmer
-makensis -DVERSION=0.1.0 -DDIST="$(cygpath -w "$PWD/dist/video-trimmer")" packaging/windows/installer.nsi
+bash .github/scripts/package-windows.sh build dist/mxCut
+makensis -DVERSION=0.1.0 -DDIST="$(cygpath -w "$PWD/dist/mxCut")" packaging/windows/installer.nsi
 ```
 
 ## Layout
@@ -165,4 +165,4 @@ makensis -DVERSION=0.1.0 -DDIST="$(cygpath -w "$PWD/dist/video-trimmer")" packag
   `.github/scripts/` builds the Windows folder and the AppImage.
 - `tests/` holds tests for the C++ classes, which generate clips and check real FFmpeg output.
 
-Set `VIDEO_TRIMMER_MPV_LOG=v` to print mpv's log when debugging playback.
+Set `MXCUT_MPV_LOG=v` to print mpv's log when debugging playback.

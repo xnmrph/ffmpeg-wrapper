@@ -1,5 +1,5 @@
 ; Windows installer for mxCut, built with NSIS.
-; makensis -DVERSION=0.1.0 -DDIST=path\to\video-trimmer -DOUTFILE=setup.exe installer.nsi
+; makensis -DVERSION=0.1.0 -DDIST=path\to\mxCut -DOUTFILE=setup.exe installer.nsi
 
 Unicode true
 !include "MUI2.nsh"
@@ -8,20 +8,24 @@ Unicode true
   !define VERSION "0.0.0"
 !endif
 !ifndef DIST
-  !define DIST "..\..\dist\video-trimmer"
+  !define DIST "..\..\dist\mxCut"
 !endif
 !ifndef OUTFILE
-  !define OUTFILE "video-trimmer-${VERSION}-setup.exe"
+  !define OUTFILE "mxCut-${VERSION}-setup.exe"
 !endif
 
 !define APP "mxCut"
-!define EXE "video-trimmer.exe"
-!define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\VideoTrimmer"
+!define EXE "mxcut.exe"
+; What the app was called before it was renamed, so an update cleans it up.
+!define OLD_EXE "video-trimmer.exe"
+!define OLD_KEY "Software\VideoTrimmer"
+!define OLD_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\VideoTrimmer"
+!define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\mxCut"
 
 Name "${APP}"
 OutFile "${OUTFILE}"
 InstallDir "$PROGRAMFILES64\${APP}"
-InstallDirRegKey HKLM "Software\VideoTrimmer" "InstallDir"
+InstallDirRegKey HKLM "Software\mxCut" "InstallDir"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
 VIProductVersion "${VERSION}.0"
@@ -31,8 +35,8 @@ VIAddVersionKey "FileVersion" "${VERSION}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "LegalCopyright" "mxCut contributors"
 
-!define MUI_ICON "..\icons\video-trimmer.ico"
-!define MUI_UNICON "..\icons\video-trimmer.ico"
+!define MUI_ICON "..\icons\mxcut.ico"
+!define MUI_UNICON "..\icons\mxcut.ico"
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${EXE}"
 
@@ -47,8 +51,18 @@ VIAddVersionKey "LegalCopyright" "mxCut contributors"
 
 ; The installer and uninstaller replace the whole install folder, so only
 ; allow a new or empty folder, or one that already holds this app.
+; Find an install made before the rename.
+Function .onInit
+  ReadRegStr $0 HKLM "Software\mxCut" "InstallDir"
+  StrCmp $0 "" 0 +4
+    ReadRegStr $0 HKLM "${OLD_KEY}" "InstallDir"
+    StrCmp $0 "" +2
+      StrCpy $INSTDIR $0
+FunctionEnd
+
 Function .onVerifyInstDir
   IfFileExists "$INSTDIR\${EXE}" ok
+  IfFileExists "$INSTDIR\${OLD_EXE}" ok
   FindFirst $0 $1 "$INSTDIR\*.*"
   loop:
     StrCmp $1 "" done
@@ -67,8 +81,11 @@ FunctionEnd
 Section "mxCut (required)" SecApp
   SectionIn RO
   ; Clear out an older version's files first, so no stale DLLs are left behind.
-  IfFileExists "$INSTDIR\${EXE}" 0 +2
+  IfFileExists "$INSTDIR\${EXE}" clear
+  IfFileExists "$INSTDIR\${OLD_EXE}" clear keep
+  clear:
     RMDir /r "$INSTDIR"
+  keep:
   SetOutPath "$INSTDIR"
   File /r "${DIST}\*.*"
   WriteUninstaller "$INSTDIR\uninstall.exe"
@@ -79,8 +96,13 @@ Section "mxCut (required)" SecApp
   IfFileExists "$DESKTOP\Video Trimmer.lnk" 0 +3
     Delete "$DESKTOP\Video Trimmer.lnk"
     CreateShortcut "$DESKTOP\${APP}.lnk" "$INSTDIR\${EXE}"
+  ; Point an existing desktop shortcut at the renamed program.
+  IfFileExists "$DESKTOP\${APP}.lnk" 0 +2
+    CreateShortcut "$DESKTOP\${APP}.lnk" "$INSTDIR\${EXE}"
 
-  WriteRegStr HKLM "Software\VideoTrimmer" "InstallDir" "$INSTDIR"
+  DeleteRegKey HKLM "${OLD_KEY}"
+  DeleteRegKey HKLM "${OLD_UNINST_KEY}"
+  WriteRegStr HKLM "Software\mxCut" "InstallDir" "$INSTDIR"
   WriteRegStr HKLM "${UNINST_KEY}" "DisplayName" "${APP}"
   WriteRegStr HKLM "${UNINST_KEY}" "DisplayVersion" "${VERSION}"
   WriteRegStr HKLM "${UNINST_KEY}" "DisplayIcon" "$INSTDIR\${EXE}"
@@ -100,5 +122,5 @@ Section "Uninstall"
   IfFileExists "$INSTDIR\${EXE}" 0 +2
     RMDir /r "$INSTDIR"
   DeleteRegKey HKLM "${UNINST_KEY}"
-  DeleteRegKey HKLM "Software\VideoTrimmer"
+  DeleteRegKey HKLM "Software\mxCut"
 SectionEnd

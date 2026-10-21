@@ -4,16 +4,16 @@
 set -euo pipefail
 
 build=${1:-build}
-dist=${2:-dist/video-trimmer}
+dist=${2:-dist/mxCut}
 prefix=$(cygpath -u "$MINGW_PREFIX")
 
 rm -rf "$dist"
 mkdir -p "$dist"
-cp "$build/video-trimmer.exe" "$dist/"
+cp "$build/mxcut.exe" "$dist/"
 cp "$prefix/bin/ffmpeg.exe" "$prefix/bin/ffprobe.exe" "$dist/"
 
 deployqt=$(command -v windeployqt6 || command -v windeployqt)
-"$deployqt" --release --no-translations --qmldir qml --qmldir packaging/qml-deploy "$dist/video-trimmer.exe"
+"$deployqt" --release --no-translations --qmldir qml --qmldir packaging/qml-deploy "$dist/mxcut.exe"
 
 # Copy every DLL from the MSYS2 prefix that anything in the folder links to,
 # repeating until nothing new turns up.

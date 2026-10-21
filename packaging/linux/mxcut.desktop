@@ -1,10 +1,10 @@
 [Desktop Entry]
 Type=Application
 Name=mxCut
-GenericName=Video Trimmer
+GenericName=Video trimmer
 Comment=Trim videos one at a time or a whole folder at once
-Exec=video-trimmer %f
-Icon=video-trimmer
+Exec=mxcut %f
+Icon=mxcut
 Terminal=false
 Categories=AudioVideo;Video;AudioVideoEditing;
 MimeType=video/mp4;video/x-matroska;video/quicktime;video/webm;video/x-msvideo;video/mpeg;video/mp2t;video/x-flv;video/x-ms-wmv;video/3gpp;video/ogg;inode/directory;

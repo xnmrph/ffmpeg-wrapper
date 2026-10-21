@@ -39,8 +39,8 @@ export LINUXDEPLOY_OUTPUT_VERSION="$version"
 linuxdeploy --appdir "$appdir" \
     --executable "$appdir/usr/bin/ffmpeg" \
     --executable "$appdir/usr/bin/ffprobe" \
-    --desktop-file "$appdir/usr/share/applications/video-trimmer.desktop" \
-    --icon-file "$appdir/usr/share/icons/hicolor/256x256/apps/video-trimmer.png" \
+    --desktop-file "$appdir/usr/share/applications/mxcut.desktop" \
+    --icon-file "$appdir/usr/share/icons/hicolor/256x256/apps/mxcut.png" \
     --plugin qt \
     --output appimage
 

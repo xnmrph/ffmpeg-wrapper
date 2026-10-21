@@ -22,7 +22,7 @@ private slots:
 void TestSettings::initTestCase()
 {
     QStandardPaths::setTestModeEnabled(true);
-    QCoreApplication::setOrganizationName("video-trimmer-tests");
+    QCoreApplication::setOrganizationName("mxcut-tests");
     QCoreApplication::setApplicationName("tst_settings");
     QSettings().clear();
 }

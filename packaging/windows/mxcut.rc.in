@@ -16,7 +16,7 @@ BEGIN
             VALUE "FileVersion", "@PROJECT_VERSION@"
             VALUE "ProductName", "mxCut"
             VALUE "ProductVersion", "@PROJECT_VERSION@"
-            VALUE "OriginalFilename", "video-trimmer.exe"
+            VALUE "OriginalFilename", "mxcut.exe"
         END
     END
     BLOCK "VarFileInfo"

@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
-import Trimmer
+import MxCut
 
 // Premiere-style timeline: a time ruler, a video track of thumbnails and an
 // audio track with the waveform, with the kept segments, their handles and the

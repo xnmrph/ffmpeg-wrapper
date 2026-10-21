@@ -21,7 +21,7 @@
         packages.default = pkgs.stdenv.mkDerivation {
           pname = "mxcut";
           # Keep in step with project(VERSION) in CMakeLists.txt; CI checks this.
-          version = "1.0.3";
+          version = "1.0.4";
           src = ./.;
 
           nativeBuildInputs = with pkgs; [ cmake pkg-config qt6.wrapQtAppsHook ];

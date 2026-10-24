@@ -2,167 +2,79 @@
 
 # mxCut
 
-A fast, cross-platform desktop app for trimming videos with FFmpeg, one at a
-time or in batches. Built with Qt 6 (QML) and libmpv, so it previews any file
-FFmpeg can read and steps through it frame by frame.
+Trim videos quickly, one at a time or a whole folder at once. mxCut shows a
+preview of the video, you mark where to start and stop, and it saves the cut.
+FFmpeg is built in, so there is nothing else to install.
 
-## Status
+**[Download mxCut](https://github.com/xnmrph/mxCut/releases/latest)** for
+Windows or Linux. See **[INSTALL.md](INSTALL.md)** for step-by-step
+instructions.
 
-| Step | What | State |
-| --- | --- | --- |
-| 1 | Single-video mode: preview, in/out scrubber, Fast and Accurate trims | Done |
-| 2 | Folder mode with a sidebar and an export queue | Done |
-| 3 | Output settings (folder, filename pattern, encoder options) | Done |
-| 4 | Packaging: Windows installer, Nix package, AppImage | Done |
+## How to use it
 
-## Installing
+### Trim one video
 
-Tagged releases on the [Releases page](https://github.com/xnmrph/mxCut/releases) carry:
+1. Click **Open video** or drag a video onto the window.
+2. Move to where the cut should start and press **A**. Move to where it should
+   end and press **D**. You can also drag the `<` and `>` tabs on the timeline.
+3. Pick **Fast** or **Accurate** (see below) and click **Trim**.
 
-- **Windows:** `mxCut-<version>-setup.exe`, an installer with a Start menu entry and an
-  uninstaller, or `mxCut-<version>-windows-x64.zip` to run without installing. Both include
-  FFmpeg.
-- **Linux:** `mxCut-<version>-x86_64.AppImage`. Make it executable and run it; FFmpeg is
-  inside. It's built on Ubuntu 24.04, so it needs a distro at least that new (glibc 2.39).
-- **Nix / NixOS:** `nix run github:xnmrph/mxCut`, or `nix profile install
-  github:xnmrph/mxCut` to keep it with its menu entry. On NixOS, add the flake's
-  `overlays.default` and put `pkgs.mxcut` in `environment.systemPackages`.
+The trimmed video is saved next to the original, with `_trim` added to its
+name.
 
-Every CI run also uploads these as build artifacts, so builds from a pull request can be tried
-before a release.
+### Keep several parts of a video
 
-To release, bump the version in `CMakeLists.txt` and `flake.nix`, then push a tag such as `v0.2.0`, or run the Build workflow from the Actions tab with "release" ticked.
+Press **+** next to the `[ ]` buttons, or **S**, to add another part. Each part
+gets its own colour, up to five. Click a part's box at the bottom to choose
+which one A and D change, and click **×** to remove it. When you click
+**Trim**, the parts are joined into one video.
 
-## Using it
+### Trim a whole folder
 
-### One video
+1. Click **Open folder** or drag a folder onto the window. Its videos are
+   listed on the left.
+2. For each video you want, mark the cut and press **Add to queue** (**Q**).
+   mxCut moves on to the next video.
+3. Click **Start trimming**. Each video is saved as its own file.
 
-Open a video with **Open video…**, drag one onto the window, or pass a path on
-the command line. Set the in and out points by dragging the handles on the
-timeline by their `<` and `>` tabs on the ruler, or with the keyboard; click or
-drag anywhere else on the timeline to scrub. Choose a mode and click **Trim**.
-The result is saved next to the original as `<name>_trim.<ext>`, or takes the
-original's place when "Replace the original video" is on in Settings.
+### Fast or Accurate
 
-To keep several parts of a video, press **+** next to the in/out buttons (S):
-each segment gets its own colour (blue, green, orange, yellow, purple, up to
-five) on the timeline and its own in/out box below it. Click a box, or drag
-one of its handles, to make it the one the in/out keys change; × removes it.
-The segments are joined in time order into one file, and **Duration** shows
-their total. Fast mode starts each part at the keyframe before it, so with
-long gaps between keyframes the joined clip carries extra footage; Accurate
-mode joins exactly what you marked.
+- **Fast** finishes in seconds and keeps full quality, but the cut can start a
+  little before the point you marked.
+- **Accurate** cuts on the exact frame you marked. It takes longer because the
+  video is re-encoded.
 
-### A folder of videos
+## Keyboard shortcuts
 
-Open a folder with **Open folder…** (or drop one onto the window, or pass it on
-the command line). The videos in it are listed on the left. For each one you
-want, set the in and out points and press **Add to queue** (Q); the app moves
-on to the next video unless you untick "Then go to next video". Queuing a
-video again updates its cut. When you're ready, click **Start trimming**: each
-video is trimmed into its own file, a few at a time ("At once" sets how many).
-The sidebar shows which videos are queued, done or failed, and the in and out
-points you set are kept while you move between videos.
-
-| Key | Action |
+| Key | What it does |
 | --- | --- |
 | Space | Play / pause |
-| A / D | Set in / out point at the playhead (change them in Settings) |
-| ← / → | Step one frame back / forward |
-| Shift + ← / → | Jump 5 seconds |
-| [ / ] | Jump to the in / out point |
-| S | Add a segment |
-| Q | Add to queue (folder mode) |
-| ↑ / ↓ | Previous / next video (folder mode) |
+| A / D | Set the start / end of the cut |
+| ← / → | One frame back / forward |
+| Shift + ← / → | 5 seconds back / forward |
+| [ / ] | Jump to the start / end of the cut |
+| S | Add another part |
+| Q | Add to queue (folder) |
+| ↑ / ↓ | Previous / next video (folder) |
 | Ctrl + O | Open a video |
 | Ctrl + Shift + O | Open a folder |
 | Ctrl + , | Settings |
 
-### Settings
+## Settings
 
-**Settings…** (top right) is saved between runs:
+Click the gear in the top right corner to change:
 
-- **Output**: save next to the original or in one folder, and the file name
-  pattern. `{name}`, `{in}`, `{out}`, `{mode}`, `{date}` and `{time}` are filled
-  in; existing files get `_2`, `_3`, ... unless overwriting is on. The original
-  is never overwritten, unless you tick **Replace the original video**: then the
-  trimmed video takes the original's name and place and the original goes to
-  the Trash or Recycle Bin. (Accurate mode may change the file type, so
-  `holiday.mov` becomes `holiday.mp4`; if that name is already taken, the
-  original is kept and the trim is saved as `holiday_trim.mp4`.)
-- **Keyboard shortcuts**: the keys that set the in and out points.
-- **Accurate mode encoding**: the video encoder (x264, x265, SVT-AV1, or NVIDIA,
-  Intel, AMD and VA-API GPU encoders), quality, speed, and whether audio is
-  re-encoded to AAC or copied. GPU encoders are offered only when a short test
-  encode works on your machine.
-- **FFmpeg**: find it automatically, or point at a specific `ffmpeg` program. A
-  banner warns when no working FFmpeg is found.
+- **Where trims are saved** and how they're named.
+- **Replace the original video**: the trimmed video takes the original's place,
+  and the original goes to the Recycle Bin or Trash.
+- **Keyboard shortcuts** for setting the start and end (A and D by default).
+- **Accurate mode quality**, including faster encoding on NVIDIA, Intel or AMD
+  graphics cards when yours supports it.
 
-When a trim fails, the message says what went wrong in plain words (unreadable
-file, full disk, GPU encoder not working, ...); hover it to see FFmpeg's own
-output.
+If a trim fails, mxCut says what went wrong. Hover over the message for the
+details.
 
-**Fast** copies the streams without re-encoding. It is lossless and finishes
-in seconds, but the cut starts at the keyframe at or before the in point.
+## For developers
 
-**Accurate** re-encodes to H.264 and AAC so the cut lands on the exact frame.
-It is slower. MKV inputs stay MKV; everything else becomes MP4.
-
-FFmpeg is looked up in this order: the program chosen in Settings, next to the
-app, then on `PATH`.
-
-## Building
-
-### Linux (Debian / Ubuntu)
-
-```sh
-sudo apt install cmake pkg-config ffmpeg libmpv-dev qt6-base-dev qt6-declarative-dev \
-  qml6-module-qtquick-controls qml6-module-qtquick-dialogs qml6-module-qtquick-layouts \
-  qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qtquick-shapes
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-ctest --test-dir build --output-on-failure
-./build/mxcut
-```
-
-### Nix
-
-```sh
-nix run github:xnmrph/mxCut   # run it
-nix develop                            # shell with every build dependency
-```
-
-### Windows (MSYS2 UCRT64)
-
-From an MSYS2 UCRT64 shell (install [MSYS2](https://www.msys2.org) first):
-
-```sh
-pacman -S mingw-w64-ucrt-x86_64-{toolchain,cmake,ninja,pkgconf,qt6-base,qt6-declarative,mpv,ffmpeg}
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-./build/mxcut.exe
-# Optional: a self-contained folder and an installer, as CI makes them.
-pacman -S mingw-w64-ucrt-x86_64-{qt6-tools,nsis}
-bash .github/scripts/package-windows.sh build dist/mxCut
-makensis -DVERSION=0.1.0 -DDIST="$(cygpath -w "$PWD/dist/mxCut")" packaging/windows/installer.nsi
-```
-
-## Layout
-
-- `src/MpvItem.*` is the video preview, a Qt Quick item drawn by libmpv's OpenGL render API.
-- `src/TrimJob.*` runs one FFmpeg trim and reports its progress.
-- `src/ExportQueue.*` is folder mode's queue of TrimJobs, run a few at a time.
-- `src/VideoFolderModel.*` lists the videos in a folder, in natural order, with their queue state.
-- `src/Settings.*` holds the saved choices; `src/Encoders.*` maps each encoder to FFmpeg arguments, and
-  `src/EncoderProbe.*` finds FFmpeg and tests which encoders work.
-- `src/MediaPreview.*` makes the timeline's thumbnails and waveform with FFmpeg and caches them;
-  `src/WaveformView.*` draws the waveform.
-- `qml/Main.qml` is the window, `qml/Timeline.qml` the ruler, thumbnail and audio tracks with the
-  in/out handles, `qml/FileSidebar.qml` and `qml/QueuePanel.qml` the folder-mode side panels, and
-  `qml/SettingsDialog.qml` the Settings window. `qml/Theme.qml` holds the colours and
-  `qml/Icons.qml` the icon shapes.
-- `packaging/` has the icon, the Linux menu entry and the Windows installer script;
-  `.github/scripts/` builds the Windows folder and the AppImage.
-- `tests/` holds tests for the C++ classes, which generate clips and check real FFmpeg output.
-
-Set `MXCUT_MPV_LOG=v` to print mpv's log when debugging playback.
+Building from source, releasing and how the code is laid out are in
+[BUILDING.md](BUILDING.md).
